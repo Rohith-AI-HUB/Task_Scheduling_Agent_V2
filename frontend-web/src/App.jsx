@@ -8,6 +8,8 @@ import TeacherDashboard from './pages/TeacherDashboard';
 import StudentDashboard from './pages/StudentDashboard';
 import SubjectView from './pages/SubjectView';
 import TaskView from './pages/TaskView';
+import Profile from './pages/Profile';
+import Calendar from './pages/Calendar';
 
 function App() {
   return (
@@ -63,6 +65,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <TaskView />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/calendar"
+            element={
+              <ProtectedRoute>
+                <Calendar />
               </ProtectedRoute>
             }
           />

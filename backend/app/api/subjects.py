@@ -22,13 +22,17 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def _serialize_subject(doc: dict) -> SubjectResponse:
+def _serialize_subject(
+    doc: dict, *, student_count: int | None = None, task_count: int | None = None
+) -> SubjectResponse:
     return SubjectResponse(
         id=str(doc["_id"]),
         name=doc["name"],
         code=doc.get("code"),
         teacher_uid=doc["teacher_uid"],
         join_code=doc["join_code"],
+        student_count=student_count,
+        task_count=task_count,
         created_at=doc["created_at"],
         updated_at=doc["updated_at"],
     )
@@ -121,7 +125,48 @@ async def list_subjects(current_user: dict = Depends(get_current_user)):
             [("updated_at", -1), ("_id", -1)]
         )
         subjects = await cursor.to_list(length=None)
-        return [_serialize_subject(s) for s in subjects]
+        subject_oids = [s.get("_id") for s in subjects if s.get("_id")]
+        subject_oids = [s for s in subject_oids if isinstance(s, ObjectId)]
+
+        student_counts: dict[ObjectId, int] = {}
+        task_counts: dict[ObjectId, int] = {}
+        if subject_oids:
+            enrollments_collection = get_collection("enrollments")
+            enrollment_agg = await enrollments_collection.aggregate(
+                [
+                    {"$match": {"subject_id": {"$in": subject_oids}}},
+                    {"$group": {"_id": "$subject_id", "count": {"$sum": 1}}},
+                ]
+            ).to_list(length=None)
+            for row in enrollment_agg:
+                if not isinstance(row, dict):
+                    continue
+                sid = row.get("_id")
+                if isinstance(sid, ObjectId):
+                    student_counts[sid] = int(row.get("count") or 0)
+
+            tasks_collection = get_collection("tasks")
+            task_agg = await tasks_collection.aggregate(
+                [
+                    {"$match": {"subject_id": {"$in": subject_oids}}},
+                    {"$group": {"_id": "$subject_id", "count": {"$sum": 1}}},
+                ]
+            ).to_list(length=None)
+            for row in task_agg:
+                if not isinstance(row, dict):
+                    continue
+                sid = row.get("_id")
+                if isinstance(sid, ObjectId):
+                    task_counts[sid] = int(row.get("count") or 0)
+
+        return [
+            _serialize_subject(
+                s,
+                student_count=student_counts.get(s.get("_id"), 0),
+                task_count=task_counts.get(s.get("_id"), 0),
+            )
+            for s in subjects
+        ]
 
     enrollments_collection = get_collection("enrollments")
     enrollments = await enrollments_collection.find({"student_uid": current_user["uid"]}).to_list(

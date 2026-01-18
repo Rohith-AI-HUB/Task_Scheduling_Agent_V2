@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 
@@ -7,6 +7,8 @@ const AISchedule = () => {
   const [schedule, setSchedule] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const inFlightRef = useRef(false);
 
   const getErrorMessage = (err, fallback) => {
     const detail = err?.response?.data?.detail;
@@ -20,21 +22,47 @@ const AISchedule = () => {
     return fallback;
   };
 
-  const load = async () => {
-    setIsLoading(true);
-    setError('');
+  const load = async ({ silent = false } = {}) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    if (!silent) {
+      setIsLoading(true);
+      setError('');
+    } else {
+      setIsRefreshing(true);
+    }
     try {
       const response = await api.get('/ai/schedule');
       setSchedule(response.data);
+      setError('');
     } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load AI schedule'));
+      if (!silent) setError(getErrorMessage(err, 'Failed to load AI schedule'));
     } finally {
+      inFlightRef.current = false;
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
     load();
+  }, []);
+
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState !== 'visible') return;
+      load({ silent: true });
+    };
+
+    const intervalId = window.setInterval(tick, 5000);
+    const onVis = () => {
+      if (document.visibilityState === 'visible') tick();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVis);
+    };
   }, []);
 
   const items = useMemo(() => schedule?.tasks || [], [schedule]);
@@ -117,22 +145,20 @@ const AISchedule = () => {
           <div className="flex gap-1">
             <button
               className="size-8 flex items-center justify-center rounded-lg hover:bg-background-light dark:hover:bg-slate-800 text-[#5d479e] dark:text-slate-400 disabled:opacity-60"
-              onClick={load}
+              onClick={() => load({ silent: false })}
               disabled={isLoading}
               type="button"
             >
               <span className="material-symbols-outlined text-[18px]">sync</span>
             </button>
-            <button
-              className="size-8 flex items-center justify-center rounded-lg hover:bg-background-light dark:hover:bg-slate-800 text-[#5d479e] dark:text-slate-400"
-              type="button"
-            >
-              <span className="material-symbols-outlined text-[18px]">more_vert</span>
-            </button>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`flex h-2 w-2 rounded-full ${error ? 'bg-red-500' : 'bg-green-500'}`}></span>
+          <span
+            className={`flex h-2 w-2 rounded-full ${
+              error ? 'bg-red-500' : isRefreshing ? 'bg-primary' : 'bg-green-500'
+            }`}
+          ></span>
           <p className="text-[#5d479e] dark:text-slate-400 text-xs font-medium uppercase tracking-wider">
             {error ? 'AI Error' : 'AI Optimized'} • {formatRelative(schedule?.generated_at) || '—'}
           </p>
@@ -214,7 +240,7 @@ const AISchedule = () => {
       <div className="p-3 bg-background-light/50 dark:bg-slate-800/50 flex justify-center">
         <button
           className="flex items-center gap-2 text-primary dark:text-primary hover:text-primary/80 text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-60"
-          onClick={load}
+          onClick={() => load({ silent: false })}
           disabled={isLoading}
           type="button"
         >

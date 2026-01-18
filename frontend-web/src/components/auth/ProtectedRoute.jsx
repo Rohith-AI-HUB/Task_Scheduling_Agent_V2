@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { auth } from '../../config/firebase';
 
 const ProtectedRoute = ({ children, requireRole = null }) => {
-  const { currentUser, userRole, loading } = useAuth();
+  const { currentUser, userRole, loading, needsRegistration } = useAuth();
   const signedInUser = currentUser || auth.currentUser;
 
   if (loading) {
@@ -19,6 +19,11 @@ const ProtectedRoute = ({ children, requireRole = null }) => {
 
   if (!signedInUser) {
     return <Navigate to="/login" replace />;
+  }
+
+  // If user needs to complete registration, redirect to register page
+  if (needsRegistration) {
+    return <Navigate to="/register" state={{ message: 'Please select your role to complete registration.' }} replace />;
   }
 
   if (requireRole && !userRole) {

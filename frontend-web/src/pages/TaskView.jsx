@@ -8,7 +8,7 @@ import EvaluationConfigEditor from '../components/EvaluationConfigEditor';
 const TaskView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { userRole } = useAuth();
+  const { userRole, backendUser } = useAuth();
   const [task, setTask] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -29,6 +29,7 @@ const TaskView = () => {
   const [groupSearch, setGroupSearch] = useState('');
   const [groupSort, setGroupSort] = useState('name');
   const [collapsedGroups, setCollapsedGroups] = useState({});
+  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
   const fileInputRef = useRef(null);
 
   const getErrorMessage = (err, fallback) => {
@@ -110,6 +111,14 @@ const TaskView = () => {
     const d = new Date(deadline);
     if (Number.isNaN(d.getTime())) return null;
     return d.toLocaleString();
+  };
+
+  const resolvePhotoUrl = (photoUrl) => {
+    if (!photoUrl) return '';
+    const u = String(photoUrl);
+    if (u.startsWith('http://') || u.startsWith('https://')) return u;
+    const root = String(api?.defaults?.baseURL || '').replace(/\/api\/?$/, '');
+    return `${root}${u}`;
   };
 
   const toDatetimeLocalValue = (value) => {
@@ -440,11 +449,27 @@ const TaskView = () => {
                 </nav>
               </div>
               <div className="flex items-center gap-4">
-                <button className="bg-primary text-white text-sm font-bold px-4 py-2 rounded-lg hover:bg-primary/90 transition-all flex items-center gap-2">
+                <button
+                  className="bg-primary text-white text-sm font-bold px-4 py-2 rounded-lg hover:bg-primary/90 transition-all flex items-center gap-2"
+                  onClick={() => navigate('/profile')}
+                  type="button"
+                >
                   <span className="material-symbols-outlined text-lg">person</span>
                   Teacher Profile
                 </button>
-                <div className="size-10 rounded-full bg-cover bg-center border-2 border-primary/20 bg-gradient-to-br from-primary/20 to-primary/5"></div>
+                <button
+                  className="size-10 rounded-full overflow-hidden border-2 border-primary/20 bg-gradient-to-br from-primary/20 to-primary/5"
+                  onClick={() => navigate('/profile')}
+                  type="button"
+                >
+                  {backendUser?.photo_url ? (
+                    <img
+                      alt="Profile"
+                      className="h-full w-full object-cover"
+                      src={resolvePhotoUrl(backendUser.photo_url)}
+                    />
+                  ) : null}
+                </button>
               </div>
             </div>
           </header>
@@ -996,11 +1021,6 @@ const TaskView = () => {
 
                 <footer className="mt-12 pt-8 border-t border-[#eae6f4] dark:border-[#2a2438] flex flex-col md:flex-row items-center justify-between text-[#5d479e] dark:text-[#a094c7] text-xs uppercase tracking-widest font-bold">
                   <p>© TASK SCHEDULING AGENT</p>
-                  <div className="flex gap-6 mt-4 md:mt-0">
-                    <button className="hover:text-primary transition-colors">Privacy Policy</button>
-                    <button className="hover:text-primary transition-colors">Terms of Service</button>
-                    <button className="hover:text-primary transition-colors">Support</button>
-                  </div>
                 </footer>
               </>
             )}
@@ -1136,36 +1156,78 @@ const TaskView = () => {
       ) : (
         <div className="relative flex h-screen w-full flex-col overflow-y-auto overflow-x-hidden">
           <div className="layout-container flex h-full grow flex-col">
-            <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-[#eae6f4] dark:border-white/10 bg-white dark:bg-background-dark px-6 md:px-10 py-3 sticky top-0 z-50">
-              <div className="flex items-center gap-4 text-primary">
-                <div className="size-6">
-                  <svg fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                    <path
-                      d="M8.57829 8.57829C5.52816 11.6284 3.451 15.5145 2.60947 19.7452C1.76794 23.9758 2.19984 28.361 3.85056 32.3462C5.50128 36.3314 8.29667 39.7376 11.8832 42.134C15.4698 44.5305 19.6865 45.8096 24 45.8096C28.3135 45.8096 32.5302 44.5305 36.1168 42.134C39.7033 39.7375 42.4987 36.3314 44.1494 32.3462C45.8002 28.361 46.2321 23.9758 45.3905 19.7452C44.549 15.5145 42.4718 11.6284 39.4217 8.57829L24 24L8.57829 8.57829Z"
-                      fill="currentColor"
-                    ></path>
-                  </svg>
+            <header className="border-b border-solid border-[#eae6f4] dark:border-white/10 bg-white dark:bg-background-dark sticky top-0 z-50">
+              <div className="px-4 sm:px-6 md:px-10 py-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 text-primary min-w-0">
+                    <div className="size-6 shrink-0">
+                      <svg fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                        <path
+                          d="M8.57829 8.57829C5.52816 11.6284 3.451 15.5145 2.60947 19.7452C1.76794 23.9758 2.19984 28.361 3.85056 32.3462C5.50128 36.3314 8.29667 39.7376 11.8832 42.134C15.4698 44.5305 19.6865 45.8096 24 45.8096C28.3135 45.8096 32.5302 44.5305 36.1168 42.134C39.7033 39.7375 42.4987 36.3314 44.1494 32.3462C45.8002 28.361 46.2321 23.9758 45.3905 19.7452C44.549 15.5145 42.4718 11.6284 39.4217 8.57829L24 24L8.57829 8.57829Z"
+                          fill="currentColor"
+                        ></path>
+                      </svg>
+                    </div>
+                    <h2 className="text-[#110d1c] dark:text-white text-base sm:text-lg font-bold leading-tight tracking-[-0.015em] truncate">
+                      Task Scheduling Agent
+                    </h2>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      className="md:hidden flex items-center justify-center rounded-lg size-10 border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-[#110d1c] dark:text-gray-300 hover:border-primary/40 transition-colors"
+                      onClick={() => setIsHeaderMenuOpen((v) => !v)}
+                      type="button"
+                    >
+                      <span className="material-symbols-outlined">{isHeaderMenuOpen ? 'close' : 'menu'}</span>
+                    </button>
+                    <button
+                      className="size-10 rounded-full bg-cover bg-center border border-gray-200 dark:border-white/10 bg-gradient-to-br from-primary/20 to-primary/5 overflow-hidden"
+                      onClick={() => navigate('/profile')}
+                      type="button"
+                    >
+                      {backendUser?.photo_url ? (
+                        <img
+                          alt="Profile"
+                          className="h-full w-full object-cover"
+                          referrerPolicy="no-referrer"
+                          src={resolvePhotoUrl(backendUser.photo_url)}
+                        />
+                      ) : (
+                        <span className="material-symbols-outlined text-[#5d479e] dark:text-gray-300">person</span>
+                      )}
+                    </button>
+                  </div>
                 </div>
-                <h2 className="text-[#110d1c] dark:text-white text-lg font-bold leading-tight tracking-[-0.015em]">
-                  Task Scheduling Agent
-                </h2>
-              </div>
-              <div className="flex flex-1 justify-end gap-8">
-                <nav className="hidden md:flex items-center gap-9">
+
+                <nav className={`${isHeaderMenuOpen ? 'flex' : 'hidden'} md:flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-9`}>
                   <button
                     className="text-[#110d1c] dark:text-gray-300 text-sm font-medium leading-normal hover:text-primary transition-colors"
-                    onClick={() => navigate('/student/dashboard')}
+                    onClick={() => {
+                      setIsHeaderMenuOpen(false);
+                      navigate('/student/dashboard');
+                    }}
+                    type="button"
                   >
                     Dashboard
                   </button>
-                  <button className="text-primary text-sm font-semibold leading-normal underline underline-offset-4">
+                  <button
+                    className="text-primary text-sm font-semibold leading-normal underline underline-offset-4"
+                    onClick={() => setIsHeaderMenuOpen(false)}
+                    type="button"
+                  >
                     Courses
                   </button>
-                  <button className="text-[#110d1c] dark:text-gray-300 text-sm font-medium leading-normal hover:text-primary transition-colors">
+                  <button
+                    className="text-[#110d1c] dark:text-gray-300 text-sm font-medium leading-normal hover:text-primary transition-colors"
+                    onClick={() => {
+                      setIsHeaderMenuOpen(false);
+                      navigate('/calendar');
+                    }}
+                    type="button"
+                  >
                     Calendar
                   </button>
                 </nav>
-                <div className="size-10 rounded-full bg-cover bg-center border border-gray-200 dark:border-white/10 bg-gradient-to-br from-primary/20 to-primary/5"></div>
               </div>
             </header>
 

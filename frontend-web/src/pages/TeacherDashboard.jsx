@@ -1,16 +1,23 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { logout } from '../services/authService';
 
 const TeacherDashboard = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, backendUser } = useAuth();
   const navigate = useNavigate();
   const [subjects, setSubjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
+  const inFlightRef = useRef(false);
+  const [upcomingTasks, setUpcomingTasks] = useState([]);
+  const [upcomingLoading, setUpcomingLoading] = useState(true);
+  const [upcomingRefreshing, setUpcomingRefreshing] = useState(false);
+  const [upcomingError, setUpcomingError] = useState('');
+  const upcomingInFlightRef = useRef(false);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createName, setCreateName] = useState('');
@@ -35,21 +42,107 @@ const TeacherDashboard = () => {
     'from-amber-600 to-orange-700',
   ];
 
-  const loadSubjects = async () => {
-    setIsLoading(true);
-    setLoadError('');
+  const resolvePhotoUrl = (photoUrl) => {
+    if (!photoUrl) return '';
+    const u = String(photoUrl);
+    if (u.startsWith('http://') || u.startsWith('https://')) return u;
+    const root = String(api?.defaults?.baseURL || '').replace(/\/api\/?$/, '');
+    return `${root}${u}`;
+  };
+
+  const loadSubjects = async ({ silent } = {}) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+
+    if (silent) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+      setLoadError('');
+    }
     try {
       const response = await api.get('/subjects');
       setSubjects(response.data || []);
     } catch (err) {
-      setLoadError(err?.response?.data?.detail || 'Failed to load classrooms');
+      if (!silent) setLoadError(err?.response?.data?.detail || 'Failed to load classrooms');
     } finally {
-      setIsLoading(false);
+      inFlightRef.current = false;
+      if (silent) {
+        setIsRefreshing(false);
+      } else {
+        setIsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    loadSubjects();
+    loadSubjects({ silent: false });
+  }, []);
+
+  const loadUpcomingTasks = async ({ silent } = {}) => {
+    if (upcomingInFlightRef.current) return;
+    upcomingInFlightRef.current = true;
+
+    if (silent) {
+      setUpcomingRefreshing(true);
+    } else {
+      setUpcomingLoading(true);
+      setUpcomingError('');
+    }
+
+    try {
+      const res = await api.get('/dashboard/teacher/upcoming', { params: { days: 14, limit: 6 } });
+      setUpcomingTasks(res.data?.items || []);
+    } catch (err) {
+      if (!silent) setUpcomingError(err?.response?.data?.detail || 'Failed to load upcoming tasks');
+    } finally {
+      upcomingInFlightRef.current = false;
+      if (silent) {
+        setUpcomingRefreshing(false);
+      } else {
+        setUpcomingLoading(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    const tick = () => {
+      if (document.hidden) return;
+      loadSubjects({ silent: true });
+    };
+
+    const intervalId = window.setInterval(tick, 5000);
+    const onVisibility = () => {
+      if (!document.hidden) tick();
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
+    loadUpcomingTasks({ silent: false });
+  }, []);
+
+  useEffect(() => {
+    const tick = () => {
+      if (document.hidden) return;
+      loadUpcomingTasks({ silent: true });
+    };
+
+    const intervalId = window.setInterval(tick, 5000);
+    const onVisibility = () => {
+      if (!document.hidden) tick();
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, []);
 
   const filteredSubjects = useMemo(() => {
@@ -62,6 +155,16 @@ const TeacherDashboard = () => {
   }, [subjects, search]);
 
   const activeSubjects = subjects.length;
+  const enrolledStudents = useMemo(
+    () => subjects.reduce((sum, s) => sum + (Number(s?.student_count) || 0), 0),
+    [subjects]
+  );
+
+  const formatDue = (deadline) => {
+    const d = new Date(deadline);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -133,7 +236,13 @@ const TeacherDashboard = () => {
               <button className="text-sm font-semibold text-primary" onClick={() => navigate('/teacher/dashboard')}>
                 Dashboard
               </button>
-              <button className="text-sm font-medium hover:text-primary transition-colors">Calendar</button>
+              <button
+                className="text-sm font-medium hover:text-primary transition-colors"
+                onClick={() => navigate('/calendar')}
+                type="button"
+              >
+                Calendar
+              </button>
               <button className="text-sm font-medium hover:text-primary transition-colors">Reports</button>
             </nav>
             <div className="h-8 w-px bg-gray-200 dark:bg-white/10 hidden md:block"></div>
@@ -144,7 +253,15 @@ const TeacherDashboard = () => {
               <span className="material-symbols-outlined text-sm">logout</span>
               <span className="hidden sm:inline">Logout</span>
             </button>
-            <div className="h-10 w-10 rounded-full border-2 border-primary/20 bg-gradient-to-br from-primary/20 to-primary/5"></div>
+            <button
+              className="h-10 w-10 rounded-full overflow-hidden border-2 border-primary/20 bg-gradient-to-br from-primary/20 to-primary/5"
+              onClick={() => navigate('/profile')}
+              type="button"
+            >
+              {backendUser?.photo_url ? (
+                <img alt="Profile" className="h-full w-full object-cover" src={resolvePhotoUrl(backendUser.photo_url)} />
+              ) : null}
+            </button>
           </div>
         </header>
 
@@ -174,7 +291,11 @@ const TeacherDashboard = () => {
               </nav>
             </div>
             <div className="flex flex-col mt-auto">
-              <button className="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-[#eae6f4] dark:hover:bg-white/5 transition-colors">
+              <button
+                className="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-[#eae6f4] dark:hover:bg-white/5 transition-colors"
+                onClick={() => navigate('/profile')}
+                type="button"
+              >
                 <span className="material-symbols-outlined">settings</span>
                 <span>Settings</span>
               </button>
@@ -222,7 +343,7 @@ const TeacherDashboard = () => {
                   </p>
                   <span className="material-symbols-outlined text-primary">group</span>
                 </div>
-                <p className="text-3xl font-black tracking-tight">0</p>
+                <p className="text-3xl font-black tracking-tight">{enrolledStudents}</p>
               </div>
               <div className="bg-white dark:bg-white/5 p-6 rounded-xl border border-[#d5cee9] dark:border-white/10 flex flex-col gap-1 shadow-sm">
                 <div className="flex items-center justify-between mb-2">
@@ -235,18 +356,96 @@ const TeacherDashboard = () => {
               </div>
             </div>
 
+            <div className="bg-white dark:bg-white/5 rounded-xl border border-[#d5cee9] dark:border-white/10 p-6 shadow-sm mb-10">
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div className="min-w-0">
+                  <h3 className="text-lg font-bold">Upcoming Tasks</h3>
+                  <p className="text-sm text-[#5d479e] dark:text-gray-400 truncate">
+                    Next 14 days
+                    {upcomingRefreshing ? ' • Refreshing…' : ''}
+                  </p>
+                </div>
+                <button
+                  className="text-sm font-bold text-primary hover:underline shrink-0"
+                  onClick={() => navigate('/calendar')}
+                  type="button"
+                >
+                  View Calendar
+                </button>
+              </div>
+
+              {upcomingError ? (
+                <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+                  {upcomingError}
+                </div>
+              ) : null}
+
+              {upcomingLoading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 4 }).map((_, idx) => (
+                    <div
+                      key={idx}
+                      className="h-14 rounded-lg bg-[#eae6f4] dark:bg-white/10 animate-pulse"
+                    ></div>
+                  ))}
+                </div>
+              ) : upcomingTasks.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-[#d5cee9] dark:border-white/10 p-6 text-center">
+                  <p className="font-bold">No upcoming tasks</p>
+                  <p className="text-sm text-[#5d479e] dark:text-gray-400 mt-1">
+                    Create tasks with deadlines to see them here.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {upcomingTasks.map((t) => (
+                    <button
+                      key={t.task_id}
+                      className="w-full text-left flex items-center justify-between gap-4 p-4 rounded-lg border border-[#eae6f4] dark:border-white/10 hover:border-primary/40 hover:bg-primary/[0.02] transition-colors"
+                      onClick={() => navigate(`/task/${t.task_id}`)}
+                      type="button"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                              t.band === 'urgent'
+                                ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'
+                                : t.band === 'high'
+                                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                                  : 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300'
+                            }`}
+                          >
+                            {t.band}
+                          </span>
+                          <span className="text-xs font-bold text-[#5d479e] dark:text-gray-400 truncate">
+                            {t.subject_name}
+                          </span>
+                        </div>
+                        <div className="mt-1 font-bold text-[#110d1c] dark:text-white truncate">{t.title}</div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="text-xs font-bold text-[#110d1c] dark:text-white">
+                          {formatDue(t.deadline)}
+                        </div>
+                        <div className="text-xs text-[#5d479e] dark:text-gray-400">Due</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold">Your Classrooms</h3>
               <div className="flex gap-2">
                 <button
-                  onClick={loadSubjects}
+                  onClick={() => loadSubjects({ silent: false })}
                   className="p-2 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-gray-100 dark:hover:bg-white/5"
-                  disabled={isLoading}
+                  disabled={isLoading || isRefreshing}
+                  type="button"
                 >
                   <span className="material-symbols-outlined">refresh</span>
-                </button>
-                <button className="p-2 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-gray-100 dark:hover:bg-white/5">
-                  <span className="material-symbols-outlined">grid_view</span>
                 </button>
               </div>
             </div>
@@ -306,7 +505,7 @@ const TeacherDashboard = () => {
                           onClick={() => openEdit(subject)}
                           type="button"
                         >
-                          <span className="material-symbols-outlined">more_vert</span>
+                          Edit
                         </button>
                       </div>
                       <h4 className="text-white font-black text-xl leading-tight">{subject.name}</h4>
@@ -332,10 +531,12 @@ const TeacherDashboard = () => {
                       </div>
                       <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
                         <span className="flex items-center gap-1">
-                          <span className="material-symbols-outlined text-sm">group</span> 0 Students
+                          <span className="material-symbols-outlined text-sm">group</span>{' '}
+                          {Number(subject?.student_count) || 0} Student{Number(subject?.student_count) === 1 ? '' : 's'}
                         </span>
                         <span className="flex items-center gap-1">
-                          <span className="material-symbols-outlined text-sm">assignment</span> 0 Tasks
+                          <span className="material-symbols-outlined text-sm">assignment</span>{' '}
+                          {Number(subject?.task_count) || 0} Task{Number(subject?.task_count) === 1 ? '' : 's'}
                         </span>
                       </div>
                       <div className="pt-4 border-t border-[#eae6f4] dark:border-white/10 flex gap-2">
@@ -344,13 +545,6 @@ const TeacherDashboard = () => {
                           className="flex-1 bg-[#eae6f4] dark:bg-white/10 text-primary dark:text-white font-bold py-2 rounded-lg text-sm hover:bg-primary hover:text-white transition-all"
                         >
                           View
-                        </button>
-                        <button
-                          onClick={() => openEdit(subject)}
-                          className="p-2 border border-[#eae6f4] dark:border-white/10 text-gray-500 rounded-lg hover:text-blue-600 hover:border-blue-600 transition-all"
-                          type="button"
-                        >
-                          <span className="material-symbols-outlined text-xl">edit</span>
                         </button>
                         <button
                           onClick={async () => {

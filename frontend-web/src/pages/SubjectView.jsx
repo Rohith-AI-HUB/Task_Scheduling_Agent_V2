@@ -7,7 +7,7 @@ import EvaluationConfigEditor from '../components/EvaluationConfigEditor';
 const SubjectView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { userRole } = useAuth();
+  const { userRole, backendUser } = useAuth();
   const [subject, setSubject] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -38,6 +38,7 @@ const SubjectView = () => {
   const [roster, setRoster] = useState([]);
   const [rosterLoading, setRosterLoading] = useState(false);
   const [rosterError, setRosterError] = useState('');
+  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
 
   const getErrorMessage = (err, fallback) => {
     const detail = err?.response?.data?.detail;
@@ -50,6 +51,14 @@ const SubjectView = () => {
     if (detail && typeof detail === 'object') return JSON.stringify(detail);
     if (typeof err?.message === 'string' && err.message) return err.message;
     return fallback;
+  };
+
+  const resolvePhotoUrl = (photoUrl) => {
+    if (!photoUrl) return '';
+    const u = String(photoUrl);
+    if (u.startsWith('http://') || u.startsWith('https://')) return u;
+    const root = String(api?.defaults?.baseURL || '').replace(/\/api\/?$/, '');
+    return `${root}${u}`;
   };
 
   const groupPreview = useMemo(() => {
@@ -554,55 +563,91 @@ const SubjectView = () => {
         </>
       ) : (
         <>
-          <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-800 bg-white dark:bg-background-dark px-6 md:px-10 py-3 sticky top-0 z-50">
-            <div className="flex items-center gap-8">
-              <div className="flex items-center gap-4 text-slate-900 dark:text-white">
-                <div className="size-8 bg-primary rounded-lg flex items-center justify-center text-white">
-                  <span className="material-symbols-outlined">event_upcoming</span>
-                </div>
-                <h2 className="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-[-0.015em]">
-                  Task Scheduling Agent
-                </h2>
-              </div>
-              <nav className="hidden md:flex items-center gap-9">
-                <button
-                  className="text-slate-600 dark:text-slate-400 hover:text-primary text-sm font-medium leading-normal transition-colors"
-                  onClick={() => navigate('/student/dashboard')}
-                >
-                  Dashboard
-                </button>
-                <button className="text-primary text-sm font-bold leading-normal">My Subjects</button>
-                <button className="text-slate-600 dark:text-slate-400 hover:text-primary text-sm font-medium leading-normal transition-colors">
-                  Calendar
-                </button>
-                <button className="text-slate-600 dark:text-slate-400 hover:text-primary text-sm font-medium leading-normal transition-colors">
-                  Reports
-                </button>
-              </nav>
-            </div>
-            <div className="flex flex-1 justify-end gap-6">
-              <label className="hidden md:flex flex-col min-w-40 h-10 max-w-64">
-                <div className="flex w-full flex-1 items-stretch rounded-lg h-full overflow-hidden border border-slate-200 dark:border-slate-700">
-                  <div className="text-slate-400 flex bg-slate-50 dark:bg-slate-800 items-center justify-center pl-4">
-                    <span className="material-symbols-outlined text-xl">search</span>
+          <header className="border-b border-solid border-slate-200 dark:border-slate-800 bg-white dark:bg-background-dark sticky top-0 z-50">
+            <div className="px-4 sm:px-6 md:px-10 py-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="size-8 bg-primary rounded-lg flex items-center justify-center text-white shrink-0">
+                    <span className="material-symbols-outlined">event_upcoming</span>
                   </div>
-                  <input
-                    className="form-input flex w-full min-w-0 flex-1 border-none bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-0 placeholder:text-slate-400 px-4 text-sm font-normal"
-                    placeholder="Search tasks..."
-                    value={taskSearch}
-                    onChange={(e) => setTaskSearch(e.target.value)}
-                  />
+                  <h2 className="text-slate-900 dark:text-white text-base sm:text-lg font-bold leading-tight tracking-[-0.015em] truncate">
+                    Task Scheduling Agent
+                  </h2>
                 </div>
-              </label>
-              <div className="flex gap-2">
-                <button className="flex items-center justify-center rounded-lg size-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
-                  <span className="material-symbols-outlined">notifications</span>
-                </button>
-                <button className="flex items-center justify-center rounded-lg size-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
-                  <span className="material-symbols-outlined">settings</span>
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    className="md:hidden flex items-center justify-center rounded-lg size-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                    onClick={() => setIsHeaderMenuOpen((v) => !v)}
+                    type="button"
+                  >
+                    <span className="material-symbols-outlined">{isHeaderMenuOpen ? 'close' : 'menu'}</span>
+                  </button>
+                  <button className="flex items-center justify-center rounded-lg size-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                    <span className="material-symbols-outlined">notifications</span>
+                  </button>
+                  <button
+                    className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 ring-2 ring-slate-100 dark:ring-slate-800 bg-gradient-to-br from-primary/20 to-primary/5 overflow-hidden"
+                    onClick={() => navigate('/profile')}
+                    type="button"
+                  >
+                    {backendUser?.photo_url ? (
+                      <img
+                        alt="Profile"
+                        className="h-full w-full object-cover"
+                        referrerPolicy="no-referrer"
+                        src={resolvePhotoUrl(backendUser.photo_url)}
+                      />
+                    ) : (
+                      <span className="material-symbols-outlined text-slate-500 dark:text-slate-300">person</span>
+                    )}
+                  </button>
+                </div>
               </div>
-              <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 ring-2 ring-slate-100 dark:ring-slate-800 bg-gradient-to-br from-primary/20 to-primary/5"></div>
+
+              <div className={`${isHeaderMenuOpen ? 'flex' : 'hidden'} md:flex flex-col md:flex-row md:items-center gap-3 md:gap-6`}>
+                <nav className="flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-9">
+                  <button
+                    className="text-slate-600 dark:text-slate-400 hover:text-primary text-sm font-medium leading-normal transition-colors"
+                    onClick={() => {
+                      setIsHeaderMenuOpen(false);
+                      navigate('/student/dashboard');
+                    }}
+                    type="button"
+                  >
+                    Dashboard
+                  </button>
+                  <button className="text-primary text-sm font-bold leading-normal" type="button">
+                    My Subjects
+                  </button>
+                  <button
+                    className="text-slate-600 dark:text-slate-400 hover:text-primary text-sm font-medium leading-normal transition-colors"
+                    onClick={() => {
+                      setIsHeaderMenuOpen(false);
+                      navigate('/calendar');
+                    }}
+                    type="button"
+                  >
+                    Calendar
+                  </button>
+                  <button className="text-slate-600 dark:text-slate-400 hover:text-primary text-sm font-medium leading-normal transition-colors" type="button">
+                    Reports
+                  </button>
+                </nav>
+
+                <label className="flex flex-col w-full md:min-w-40 md:max-w-64">
+                  <div className="flex w-full items-stretch rounded-lg h-10 overflow-hidden border border-slate-200 dark:border-slate-700">
+                    <div className="text-slate-400 flex bg-slate-50 dark:bg-slate-800 items-center justify-center pl-4">
+                      <span className="material-symbols-outlined text-xl">search</span>
+                    </div>
+                    <input
+                      className="form-input flex w-full min-w-0 flex-1 border-none bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-0 placeholder:text-slate-400 px-4 text-sm font-normal"
+                      placeholder="Search tasks..."
+                      value={taskSearch}
+                      onChange={(e) => setTaskSearch(e.target.value)}
+                    />
+                  </div>
+                </label>
+              </div>
             </div>
           </header>
 
@@ -704,10 +749,14 @@ const SubjectView = () => {
                       ? 'Completed Tasks'
                       : 'Resources'}
                   </h2>
-                  <div className="flex items-center gap-2 text-slate-500 text-sm font-medium cursor-pointer hover:text-primary">
+                  <button
+                    className="flex items-center gap-2 text-slate-500 text-sm font-medium hover:text-primary transition-colors"
+                    onClick={() => navigate('/calendar')}
+                    type="button"
+                  >
                     <span>View Full Calendar</span>
                     <span className="material-symbols-outlined text-lg">calendar_month</span>
-                  </div>
+                  </button>
                 </div>
 
                 {tasksLoading || mySubmissionsLoading ? (
@@ -759,10 +808,10 @@ const SubjectView = () => {
                         >
                           <div className="flex justify-between items-start mb-4">
                             <div
-                              className={`${badge.className} px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center gap-1`}
+                              className={`${badge.className} inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider leading-none whitespace-nowrap shrink-0 min-w-0 max-w-[70%]`}
                             >
-                              <span className="material-symbols-outlined text-sm">{badge.icon}</span>
-                              {badge.label}
+                              <span className="material-symbols-outlined text-[14px] shrink-0">{badge.icon}</span>
+                              <span className="truncate">{badge.label}</span>
                             </div>
                             <span className="text-slate-400 material-symbols-outlined hover:text-primary transition-colors">
                               more_horiz
@@ -852,13 +901,13 @@ const SubjectView = () => {
                   {taskCreateError}
                 </div>
               )}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
                     Task Title
                   </label>
                   <input
-                    className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                    className="w-full h-11 px-3 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                     placeholder="e.g. Weekly Quiz 4"
                     type="text"
                     value={taskTitle}
@@ -870,13 +919,13 @@ const SubjectView = () => {
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
                     Individual vs Group
                   </label>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      className={`px-4 py-2 rounded-lg text-sm font-bold border transition-colors ${
+                      className={`h-11 px-4 rounded-lg text-base font-bold border transition-colors ${
                         taskKind === 'individual'
                           ? 'bg-primary text-white border-primary'
                           : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:border-primary/40'
@@ -892,7 +941,7 @@ const SubjectView = () => {
                     </button>
                     <button
                       type="button"
-                      className={`px-4 py-2 rounded-lg text-sm font-bold border transition-colors ${
+                      className={`h-11 px-4 rounded-lg text-base font-bold border transition-colors ${
                         taskKind === 'group'
                           ? 'bg-primary text-white border-primary'
                           : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:border-primary/40'
@@ -909,9 +958,9 @@ const SubjectView = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Deadline</label>
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Deadline</label>
                   <input
-                    className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                    className="w-full h-11 px-3 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                     type="datetime-local"
                     value={taskDeadline}
                     onChange={(e) => {
@@ -923,11 +972,11 @@ const SubjectView = () => {
                 </div>
                 {taskKind === 'group' ? (
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                    <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
                       Group Size
                     </label>
                     <input
-                      className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                      className="w-full h-11 px-3 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                       type="number"
                       min={2}
                       value={groupSize}
@@ -940,11 +989,11 @@ const SubjectView = () => {
                   </div>
                 ) : null}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
                     {taskKind === 'group' ? 'Points (optional)' : 'Points'}
                   </label>
                   <input
-                    className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                    className="w-full h-11 px-3 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                     type="number"
                     value={taskPoints}
                     onChange={(e) => {
@@ -955,9 +1004,9 @@ const SubjectView = () => {
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Task Type</label>
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Task Type</label>
                   <select
-                    className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                    className="w-full h-11 px-3 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                     value={taskType}
                     onChange={(e) => {
                       setTaskType(e.target.value);
@@ -973,11 +1022,11 @@ const SubjectView = () => {
                   </select>
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
                     Description
                   </label>
                   <textarea
-                    className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                    className="w-full px-3 py-2.5 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                     placeholder="Describe the objectives and requirements..."
                     rows="4"
                     value={taskDescription}

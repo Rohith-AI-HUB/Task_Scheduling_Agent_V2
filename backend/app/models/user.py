@@ -28,6 +28,7 @@ class UserResponse(BaseModel):
     email: str
     name: str
     role: str
+    photo_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

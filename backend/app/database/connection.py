@@ -26,8 +26,11 @@ async def connect_to_mongo() -> None:
     _client = AsyncIOMotorClient(
         settings.mongodb_url,
         serverSelectionTimeoutMS=settings.mongodb_server_selection_timeout_ms,
+        connectTimeoutMS=settings.mongodb_server_selection_timeout_ms,
+        socketTimeoutMS=settings.mongodb_server_selection_timeout_ms,
         uuidRepresentation="standard",
     )
+    await _client.admin.command("ping")
 
 
 async def close_mongo_connection() -> None:
@@ -45,6 +48,8 @@ async def ensure_mongo_indexes() -> None:
     enrollments_collection = get_db()["enrollments"]
     tasks_collection = get_db()["tasks"]
     submissions_collection = get_db()["submissions"]
+    teacher_profile_pictures_collection = get_db()["teacher_profile_pictures"]
+    student_profile_pictures_collection = get_db()["student_profile_pictures"]
     user_context_collection = get_db()["user_context"]
     group_sets_collection = get_db()["group_sets"]
     groups_collection = get_db()["groups"]
@@ -158,4 +163,25 @@ async def ensure_mongo_indexes() -> None:
     await groups_collection.create_index(
         [("group_set_id", ASCENDING)],
         name="idx_groups_group_set_id",
+    )
+
+    await teacher_profile_pictures_collection.create_index(
+        [("user_uid", ASCENDING)],
+        unique=True,
+        name="uniq_teacher_profile_pictures_user_uid",
+    )
+    await teacher_profile_pictures_collection.create_index(
+        [("public_id", ASCENDING)],
+        unique=True,
+        name="uniq_teacher_profile_pictures_public_id",
+    )
+    await student_profile_pictures_collection.create_index(
+        [("user_uid", ASCENDING)],
+        unique=True,
+        name="uniq_student_profile_pictures_user_uid",
+    )
+    await student_profile_pictures_collection.create_index(
+        [("public_id", ASCENDING)],
+        unique=True,
+        name="uniq_student_profile_pictures_public_id",
     )

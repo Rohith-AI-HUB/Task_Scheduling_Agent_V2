@@ -4,10 +4,20 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { logout } from '../services/authService';
 import AISchedule from '../components/AISchedule';
+import DueSoon from '../components/DueSoon';
+import UpcomingTasks from '../components/UpcomingTasks';
 
 const StudentDashboard = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, backendUser } = useAuth();
   const navigate = useNavigate();
+
+  const resolvePhotoUrl = (photoUrl) => {
+    if (!photoUrl) return '';
+    const u = String(photoUrl);
+    if (u.startsWith('http://') || u.startsWith('https://')) return u;
+    const root = String(api?.defaults?.baseURL || '').replace(/\/api\/?$/, '');
+    return `${root}${u}`;
+  };
 
   const [subjects, setSubjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -80,7 +90,19 @@ const StudentDashboard = () => {
                 <p className="text-sm font-semibold dark:text-white">{currentUser?.displayName || currentUser?.email}</p>
                 <p className="text-xs text-[#5d479e] dark:text-gray-400">ID: {currentUser?.uid?.slice(0, 6)}</p>
               </div>
-              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 border-2 border-primary"></div>
+              <button
+                className="h-10 w-10 rounded-full overflow-hidden bg-gradient-to-br from-primary/30 to-primary/10 border-2 border-primary"
+                onClick={() => navigate('/profile')}
+                type="button"
+              >
+                {backendUser?.photo_url ? (
+                  <img
+                    alt="Profile"
+                    className="h-full w-full object-cover"
+                    src={resolvePhotoUrl(backendUser.photo_url)}
+                  />
+                ) : null}
+              </button>
               <button
                 onClick={handleLogout}
                 className="hidden md:inline-flex h-10 items-center rounded-lg bg-primary px-4 font-bold text-white hover:opacity-90 transition-opacity"
@@ -236,57 +258,8 @@ const StudentDashboard = () => {
 
           <aside className="lg:col-span-4 flex flex-col gap-6">
             <AISchedule />
-
-            <div className="rounded-xl border border-[#d5cee9] bg-white dark:bg-white/5 dark:border-white/10 overflow-hidden">
-              <div className="bg-primary/10 px-5 py-4 border-b border-[#d5cee9] dark:border-white/10">
-                <h3 className="flex items-center gap-2 font-bold text-primary">
-                  <span className="material-symbols-outlined">priority_high</span>
-                  Due Soon
-                </h3>
-              </div>
-              <div className="p-2">
-                <div className="flex items-center gap-4 p-3 rounded-lg hover:bg-background-light transition-colors dark:hover:bg-white/5">
-                  <div className="h-10 w-1 bg-red-500 rounded-full"></div>
-                  <div className="flex-1">
-                    <p className="text-sm font-bold dark:text-white">No tasks yet</p>
-                    <p className="text-xs text-[#5d479e] dark:text-gray-400">Tasks will appear here after Phase 2</p>
-                  </div>
-                </div>
-              </div>
-              <div className="p-4 border-t border-[#d5cee9] dark:border-white/10 bg-background-light/30 dark:bg-white/5">
-                <button className="w-full rounded-lg py-2 text-sm font-bold text-primary hover:bg-primary/5 transition-colors">
-                  See Calendar
-                </button>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-[#d5cee9] bg-white dark:bg-white/5 dark:border-white/10 overflow-hidden">
-              <div className="bg-primary/5 px-5 py-4 border-b border-[#d5cee9] dark:border-white/10">
-                <h3 className="flex items-center gap-2 font-bold text-[#110d1c] dark:text-white">
-                  <span className="material-symbols-outlined">calendar_today</span>
-                  Upcoming Tasks
-                </h3>
-              </div>
-              <div className="p-2">
-                <div className="flex flex-col items-center justify-center py-8 text-center px-4">
-                  <div className="h-12 w-12 rounded-full bg-background-light dark:bg-white/5 flex items-center justify-center text-[#5d479e]/30 mb-2">
-                    <span className="material-symbols-outlined text-3xl">pending_actions</span>
-                  </div>
-                  <p className="text-xs font-medium text-[#5d479e] dark:text-gray-400">
-                    Upcoming tasks will show up here.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-gradient-to-br from-primary to-[#6e45f9] p-6 text-white shadow-xl shadow-primary/20">
-              <p className="text-sm font-medium text-white/80">Weekly Progress</p>
-              <h4 className="mt-1 text-2xl font-bold">0% Completed</h4>
-              <div className="mt-4 h-2 w-full rounded-full bg-white/20">
-                <div className="h-full w-[0%] rounded-full bg-white"></div>
-              </div>
-              <p className="mt-3 text-xs text-white/70 italic">"Join a classroom to get started."</p>
-            </div>
+            <DueSoon />
+            <UpcomingTasks />
           </aside>
         </div>
       </main>
@@ -294,11 +267,6 @@ const StudentDashboard = () => {
       <footer className="mx-auto max-w-7xl px-6 py-10 border-t border-[#d5cee9] dark:border-white/10 mt-12">
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-[#5d479e] dark:text-gray-400">
           <p>© Task Scheduling Agent. Built for Student Success.</p>
-          <div className="flex gap-6">
-            <a className="hover:text-primary" href="#">Support Center</a>
-            <a className="hover:text-primary" href="#">Privacy Policy</a>
-            <a className="hover:text-primary" href="#">API Documentation</a>
-          </div>
         </div>
       </footer>
     </div>

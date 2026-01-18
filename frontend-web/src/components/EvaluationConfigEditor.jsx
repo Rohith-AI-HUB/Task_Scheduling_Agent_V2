@@ -56,9 +56,9 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
   return (
     <div className="p-4 rounded-xl border border-[#eae6f4] dark:border-[#2a2438] bg-[#faf9fc] dark:bg-[#221b36] space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="text-sm font-bold text-[#110d1c] dark:text-white">Evaluation (optional)</div>
+        <div className="text-base font-bold text-[#110d1c] dark:text-white">Evaluation (optional)</div>
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm font-semibold text-[#4b3d75] dark:text-[#c0bad3]">
+          <label className="flex items-center gap-2 text-base font-semibold text-[#4b3d75] dark:text-[#c0bad3]">
             <input
               type="checkbox"
               checked={!!code}
@@ -70,7 +70,7 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
             />
             Code
           </label>
-          <label className="flex items-center gap-2 text-sm font-semibold text-[#4b3d75] dark:text-[#c0bad3]">
+          <label className="flex items-center gap-2 text-base font-semibold text-[#4b3d75] dark:text-[#c0bad3]">
             <input
               type="checkbox"
               checked={!!doc}
@@ -89,11 +89,11 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-1 tracking-widest">
+              <label className="block text-sm font-bold text-[#5d479e] dark:text-[#a094c7] mb-2">
                 Language
               </label>
               <select
-                className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                className="w-full h-11 px-3 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                 value={code.language || 'python'}
                 disabled={disabled}
                 onChange={(e) => setCfg({ code: { ...code, language: e.target.value }, document: doc ? { ...doc } : null })}
@@ -109,11 +109,11 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
               ) : null}
             </div>
             <div>
-              <label className="block text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-1 tracking-widest">
+              <label className="block text-sm font-bold text-[#5d479e] dark:text-[#a094c7] mb-2">
                 Security Mode
               </label>
               <select
-                className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                className="w-full h-11 px-3 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                 value={code.security_mode || 'warn'}
                 disabled={disabled}
                 onChange={(e) =>
@@ -125,11 +125,11 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-1 tracking-widest">
+              <label className="block text-sm font-bold text-[#5d479e] dark:text-[#a094c7] mb-2">
                 Timeout (ms)
               </label>
               <input
-                className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                className="w-full h-11 px-3 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                 type="number"
                 value={code.timeout_ms ?? 2000}
                 disabled={disabled}
@@ -139,11 +139,11 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-1 tracking-widest">
+              <label className="block text-sm font-bold text-[#5d479e] dark:text-[#a094c7] mb-2">
                 Memory (MB)
               </label>
               <input
-                className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                className="w-full h-11 px-3 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                 type="number"
                 value={code.memory_limit_mb ?? 256}
                 disabled={disabled}
@@ -156,11 +156,11 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-1 tracking-widest">
+              <label className="block text-sm font-bold text-[#5d479e] dark:text-[#a094c7] mb-2">
                 Max Output (KB)
               </label>
               <input
-                className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                className="w-full h-11 px-3 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                 type="number"
                 value={code.max_output_kb ?? 64}
                 disabled={disabled}
@@ -173,11 +173,11 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-1 tracking-widest">
+              <label className="block text-sm font-bold text-[#5d479e] dark:text-[#a094c7] mb-2">
                 Code Weight
               </label>
               <input
-                className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                className="w-full h-11 px-3 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                 type="number"
                 step="0.1"
                 value={code.weight ?? 0.7}
@@ -198,7 +198,7 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
                 setCfg({ code: { ...code, enable_quality_checks: e.target.checked }, document: doc ? { ...doc } : null })
               }
             />
-            <div className="text-sm font-semibold text-[#4b3d75] dark:text-[#c0bad3]">Enable quality checks</div>
+            <div className="text-base font-semibold text-[#4b3d75] dark:text-[#c0bad3]">Enable quality checks</div>
           </div>
 
           <div className="space-y-3">
@@ -226,16 +226,16 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
             </div>
 
             {(code.test_cases || []).length === 0 ? (
-              <div className="text-sm text-[#5d479e] dark:text-[#a094c7]">No test cases configured.</div>
+              <div className="text-base text-[#5d479e] dark:text-[#a094c7]">No test cases configured.</div>
             ) : (
               <div className="space-y-3">
                 {(code.test_cases || []).map((tc, idx) => (
                   <div key={idx} className="p-3 rounded-xl border border-[#eae6f4] dark:border-[#2a2438] bg-white dark:bg-[#1c162e]">
                     <div className="flex items-center justify-between gap-3 mb-3">
-                      <div className="text-sm font-bold text-[#110d1c] dark:text-white">Case {idx + 1}</div>
+                      <div className="text-base font-bold text-[#110d1c] dark:text-white">Case {idx + 1}</div>
                       <button
                         type="button"
-                        className="px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-300 dark:border-gray-600 hover:border-rose-400 transition-colors disabled:opacity-60"
+                        className="h-9 px-3 rounded-lg text-sm font-bold border border-gray-300 dark:border-gray-600 hover:border-rose-400 transition-colors disabled:opacity-60"
                         disabled={disabled}
                         onClick={() => {
                           const nextCases = [...(code.test_cases || [])];
@@ -248,11 +248,11 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div className="md:col-span-2">
-                        <label className="block text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-1 tracking-widest">
+                        <label className="block text-sm font-bold text-[#5d479e] dark:text-[#a094c7] mb-2">
                           Description
                         </label>
                         <input
-                          className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                          className="w-full h-11 px-3 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                           value={tc.description || ''}
                           disabled={disabled}
                           onChange={(e) => {
@@ -263,11 +263,11 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-1 tracking-widest">
+                        <label className="block text-sm font-bold text-[#5d479e] dark:text-[#a094c7] mb-2">
                           Comparison
                         </label>
                         <select
-                          className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                          className="w-full h-11 px-3 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                           value={tc.comparison_mode || 'exact'}
                           disabled={disabled}
                           onChange={(e) => {
@@ -283,11 +283,11 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-1 tracking-widest">
+                        <label className="block text-sm font-bold text-[#5d479e] dark:text-[#a094c7] mb-2">
                           Points
                         </label>
                         <input
-                          className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                          className="w-full h-11 px-3 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                           type="number"
                           value={tc.points ?? 1}
                           disabled={disabled}
@@ -299,11 +299,11 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-1 tracking-widest">
+                        <label className="block text-sm font-bold text-[#5d479e] dark:text-[#a094c7] mb-2">
                           Timeout (ms)
                         </label>
                         <input
-                          className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                          className="w-full h-11 px-3 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                           type="number"
                           value={tc.timeout_ms ?? ''}
                           disabled={disabled}
@@ -317,11 +317,11 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
                         />
                       </div>
                       <div className="md:col-span-2">
-                        <label className="block text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-1 tracking-widest">
+                        <label className="block text-sm font-bold text-[#5d479e] dark:text-[#a094c7] mb-2">
                           Input
                         </label>
                         <textarea
-                          className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                          className="w-full px-3 py-2.5 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                           rows="3"
                           value={tc.input || ''}
                           disabled={disabled}
@@ -333,11 +333,11 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
                         />
                       </div>
                       <div className="md:col-span-2">
-                        <label className="block text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-1 tracking-widest">
+                        <label className="block text-sm font-bold text-[#5d479e] dark:text-[#a094c7] mb-2">
                           Expected Output
                         </label>
                         <textarea
-                          className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                          className="w-full px-3 py-2.5 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                           rows="2"
                           value={tc.expected_output || ''}
                           disabled={disabled}
@@ -361,11 +361,11 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
         <div className="space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-1 tracking-widest">
+              <label className="block text-sm font-bold text-[#5d479e] dark:text-[#a094c7] mb-2">
                 Keywords (comma-separated)
               </label>
               <input
-                className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                className="w-full h-11 px-3 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                 value={keywordText}
                 disabled={disabled}
                 onChange={(e) =>
@@ -374,11 +374,11 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-1 tracking-widest">
+              <label className="block text-sm font-bold text-[#5d479e] dark:text-[#a094c7] mb-2">
                 Min Words
               </label>
               <input
-                className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                className="w-full h-11 px-3 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                 type="number"
                 value={doc.min_words ?? ''}
                 disabled={disabled}
@@ -390,11 +390,11 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-1 tracking-widest">
+              <label className="block text-sm font-bold text-[#5d479e] dark:text-[#a094c7] mb-2">
                 Doc Weight
               </label>
               <input
-                className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                className="w-full h-11 px-3 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-base"
                 type="number"
                 step="0.1"
                 value={doc.weight ?? 0.3}
@@ -407,7 +407,7 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
           </div>
 
           <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-sm font-semibold text-[#4b3d75] dark:text-[#c0bad3]">
+            <label className="flex items-center gap-2 text-base font-semibold text-[#4b3d75] dark:text-[#c0bad3]">
               <input
                 type="checkbox"
                 checked={!!doc.enable_readability}
@@ -416,7 +416,7 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
               />
               Readability
             </label>
-            <label className="flex items-center gap-2 text-sm font-semibold text-[#4b3d75] dark:text-[#c0bad3]">
+            <label className="flex items-center gap-2 text-base font-semibold text-[#4b3d75] dark:text-[#c0bad3]">
               <input
                 type="checkbox"
                 checked={!!doc.enable_structure}
@@ -425,7 +425,7 @@ const EvaluationConfigEditor = ({ value, onChange, disabled = false }) => {
               />
               Structure
             </label>
-            <label className="flex items-center gap-2 text-sm font-semibold text-[#4b3d75] dark:text-[#c0bad3]">
+            <label className="flex items-center gap-2 text-base font-semibold text-[#4b3d75] dark:text-[#c0bad3]">
               <input
                 type="checkbox"
                 checked={!!doc.enable_plagiarism}

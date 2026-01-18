@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
 from app.ai.context_manager import ContextManager
 from app.ai.task_scheduler import TaskScheduler
@@ -24,12 +24,14 @@ async def patch_context(
 
 
 @router.get("/schedule", response_model=AIScheduleResponse)
-async def get_schedule(current_student: dict = Depends(get_current_student)):
+async def get_schedule(response: Response, current_student: dict = Depends(get_current_student)):
+    response.headers["Cache-Control"] = "no-store"
     return await _task_scheduler.generate_schedule(current_student["uid"])
 
 
 @router.post("/schedule/optimize", response_model=AIScheduleResponse)
-async def optimize_schedule(current_student: dict = Depends(get_current_student)):
+async def optimize_schedule(response: Response, current_student: dict = Depends(get_current_student)):
+    response.headers["Cache-Control"] = "no-store"
     return await _task_scheduler.generate_schedule(current_student["uid"])
 
 

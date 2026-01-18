@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Depends, Query
+from fastapi import APIRouter, HTTPException, status, Depends, Query, File, UploadFile
 from datetime import datetime
 from pymongo.errors import DuplicateKeyError
 from pydantic import BaseModel, EmailStr, Field
@@ -14,6 +14,8 @@ from app.models.user import (
 from app.utils.firebase_verify import verify_firebase_token, get_firebase_user
 from app.utils.dependencies import get_current_user, get_current_teacher
 from app.database.collections import get_collection
+from app.config import settings
+from app.services.profile_pictures import delete_profile_picture, upsert_profile_picture
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -78,6 +80,7 @@ async def register(request: RegisterRequest):
             "email": request.email,
             "name": request.name,
             "role": request.role,
+            "photo_url": None,
             "created_at": datetime.utcnow(),
             "updated_at": datetime.utcnow(),
         }
@@ -154,9 +157,11 @@ async def login(request: LoginRequest):
                 firebase_user = await get_firebase_user(uid)
                 email = request.email or firebase_user.email
                 name = request.name or firebase_user.display_name or firebase_user.email.split("@")[0]
+                photo_url = getattr(firebase_user, "photo_url", None)
             else:
                 email = request.email
                 name = request.name
+                photo_url = None
 
             # Create user with role from request
             user_data = {
@@ -164,6 +169,7 @@ async def login(request: LoginRequest):
                 "email": email,
                 "name": name,
                 "role": request.role,
+                "photo_url": photo_url,
                 "created_at": datetime.utcnow(),
                 "updated_at": datetime.utcnow(),
             }
@@ -282,6 +288,49 @@ async def update_profile(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Profile update failed"
         )
+
+
+@router.post("/me/photo", response_model=UserResponse)
+async def upload_profile_photo(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        users_collection = get_collection("users")
+        await upsert_profile_picture(current_user, file)
+
+        updated_user = await users_collection.find_one(
+            {"uid": current_user["uid"]},
+            sort=[("updated_at", -1), ("_id", -1)],
+        )
+        if not updated_user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+        return UserResponse(**updated_user)
+    finally:
+        try:
+            await file.close()
+        except Exception:
+            pass
+
+
+@router.delete("/me/photo", response_model=UserResponse)
+async def delete_profile_photo(current_user: dict = Depends(get_current_user)):
+    users_collection = get_collection("users")
+    user = await users_collection.find_one(
+        {"uid": current_user["uid"]},
+        sort=[("updated_at", -1), ("_id", -1)],
+    )
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    await delete_profile_picture(current_user)
+    updated_user = await users_collection.find_one(
+        {"uid": current_user["uid"]},
+        sort=[("updated_at", -1), ("_id", -1)],
+    )
+    if not updated_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return UserResponse(**updated_user)
 
 
 @router.get("/users", response_model=UserListResponse)

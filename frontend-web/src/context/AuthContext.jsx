@@ -15,9 +15,23 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
+  const [backendUser, setBackendUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Flag to indicate user needs to complete registration (has Firebase auth but no backend user)
+  const [needsRegistration, setNeedsRegistration] = useState(false);
+
+  const refreshBackendUser = async () => {
+    if (!auth.currentUser) return null;
+    const response = await api.get('/auth/me');
+    if (response.data) {
+      setBackendUser(response.data);
+      setUserRole(response.data.role);
+      return response.data;
+    }
+    return null;
+  };
 
   // Fetch user data from backend
   const fetchUserData = async (user) => {
@@ -29,6 +43,8 @@ export const AuthProvider = ({ children }) => {
 
       if (response.data) {
         setUserRole(response.data.role);
+        setBackendUser(response.data);
+        setNeedsRegistration(false);
         return response.data;
       }
     } catch (error) {
@@ -38,7 +54,7 @@ export const AuthProvider = ({ children }) => {
         const role = sessionStorage.getItem('pendingRole');
         if (!role) {
           setUserRole(null);
-          setError('User not found in database. Please register.');
+          setNeedsRegistration(true);
           return;
         }
 
@@ -67,6 +83,7 @@ export const AuthProvider = ({ children }) => {
 
           if (retryResponse.data) {
             setUserRole(retryResponse.data.role);
+            setBackendUser(retryResponse.data);
             return retryResponse.data;
           }
         } catch (bootstrapError) {
@@ -91,7 +108,9 @@ export const AuthProvider = ({ children }) => {
           await fetchUserData(user);
         } else {
           setCurrentUser(null);
+          setBackendUser(null);
           setUserRole(null);
+          setNeedsRegistration(false);
         }
       } catch (error) {
         console.error('Auth state change error:', error);
@@ -107,9 +126,12 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     currentUser,
+    backendUser,
+    refreshBackendUser,
     userRole,
     loading,
     error,
+    needsRegistration,
     isAuthenticated: !!currentUser,
     isTeacher: userRole === 'teacher',
     isStudent: userRole === 'student',

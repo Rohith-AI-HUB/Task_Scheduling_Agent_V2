@@ -69,7 +69,17 @@ const Login = () => {
       }
     } catch (err) {
       console.error('Google sign-in error:', err);
-      setError(err?.response?.data?.detail || getAuthErrorMessage(err.code));
+      const errorDetail = err?.response?.data?.detail || '';
+
+      // If role is required, redirect to register page to select role
+      if (err?.response?.status === 400 && errorDetail.includes('Role is required')) {
+        navigate('/register', {
+          state: { message: 'Please select your role to complete registration.' }
+        });
+        return;
+      }
+
+      setError(errorDetail || getAuthErrorMessage(err.code));
     } finally {
       setIsLoading(false);
     }
@@ -91,10 +101,6 @@ const Login = () => {
             </svg>
           </div>
           <h2 className="text-[#150d1c] dark:text-white text-lg font-bold leading-tight tracking-tight">Task Scheduling Agent</h2>
-        </div>
-        <div className="flex items-center gap-4">
-          <button className="text-sm font-medium text-[#150d1c] dark:text-gray-300 hover:text-primary transition-colors">Pricing</button>
-          <button className="text-sm font-medium text-[#150d1c] dark:text-gray-300 hover:text-primary transition-colors">Documentation</button>
         </div>
       </header>
 
@@ -215,11 +221,6 @@ const Login = () => {
           </div>
 
           {/* Additional Footer Links */}
-          <div className="mt-8 flex justify-center gap-6 text-xs text-[#79479e] dark:text-gray-500 font-medium">
-            <a className="hover:text-primary transition-colors" href="#">Privacy Policy</a>
-            <a className="hover:text-primary transition-colors" href="#">Terms of Service</a>
-            <a className="hover:text-primary transition-colors" href="#">Support</a>
-          </div>
         </div>
       </main>
 

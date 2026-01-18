@@ -1,10 +1,11 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { auth } from '../../config/firebase';
 
 const PublicRoute = ({ children }) => {
-  const { currentUser, userRole, loading } = useAuth();
+  const { currentUser, userRole, loading, needsRegistration } = useAuth();
   const signedInUser = currentUser || auth.currentUser;
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -18,7 +19,16 @@ const PublicRoute = ({ children }) => {
   }
 
   if (signedInUser) {
+    // If user needs to complete registration, redirect to register page (but allow if already there)
+    if (needsRegistration) {
+      if (location.pathname === '/register') {
+        return children;
+      }
+      return <Navigate to="/register" state={{ message: 'Please select your role to complete registration.' }} replace />;
+    }
+
     if (!userRole) {
+      // Still loading user role, show spinner
       return (
         <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
           <div className="text-center">

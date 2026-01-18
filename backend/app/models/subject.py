@@ -24,5 +24,7 @@ class SubjectResponse(BaseModel):
     code: Optional[str] = None
     teacher_uid: str
     join_code: str
+    student_count: Optional[int] = None
+    task_count: Optional[int] = None
     created_at: datetime
     updated_at: datetime

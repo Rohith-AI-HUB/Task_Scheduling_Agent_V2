@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 *.so
 .Python
+.claude
 venv/
 env/
 ENV/
@@ -77,3 +78,4 @@ build/
 # Logs
 logs/
 *.log
+.claude/settings.local.json

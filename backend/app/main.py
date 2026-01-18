@@ -2,8 +2,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 
-from app.api import auth, subjects, tasks, submissions, groups, extensions, ai_assistant
+from app.api import auth, subjects, tasks, submissions, groups, extensions, ai_assistant, dashboard, profile_pictures
 from app.config import settings
 from app.database.connection import close_mongo_connection, connect_to_mongo, ensure_mongo_indexes
 from app.utils.firebase_verify import initialize_firebase
@@ -27,6 +29,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
 
+Path(settings.uploads_dir).mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=settings.uploads_dir), name="uploads")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_parse_origins(settings.allowed_origins),
@@ -42,6 +47,8 @@ app.include_router(submissions.router, prefix="/api/submissions", tags=["submiss
 app.include_router(groups.router, prefix="/api/groups", tags=["groups"])
 app.include_router(extensions.router, prefix="/api/extensions", tags=["extensions"])
 app.include_router(ai_assistant.router, prefix="/api/ai", tags=["ai"])
+app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
+app.include_router(profile_pictures.router, prefix="/api/profile-pictures", tags=["profile_pictures"])
 
 
 @app.get("/health")
