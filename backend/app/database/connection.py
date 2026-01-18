@@ -46,6 +46,16 @@ async def ensure_mongo_indexes() -> None:
     tasks_collection = get_db()["tasks"]
     submissions_collection = get_db()["submissions"]
     user_context_collection = get_db()["user_context"]
+    group_sets_collection = get_db()["group_sets"]
+    groups_collection = get_db()["groups"]
+    try:
+        await submissions_collection.drop_index("uniq_submissions_task_student")
+    except Exception:
+        pass
+    try:
+        await submissions_collection.drop_index("uniq_submissions_task_student_individual")
+    except Exception:
+        pass
 
     pipeline = [
         {"$match": {"uid": {"$exists": True, "$ne": None}}},
@@ -102,7 +112,14 @@ async def ensure_mongo_indexes() -> None:
     await submissions_collection.create_index(
         [("task_id", ASCENDING), ("student_uid", ASCENDING)],
         unique=True,
-        name="uniq_submissions_task_student",
+        name="uniq_submissions_task_student_individual",
+        partialFilterExpression={"group_id": None},
+    )
+    await submissions_collection.create_index(
+        [("task_id", ASCENDING), ("group_id", ASCENDING)],
+        unique=True,
+        name="uniq_submissions_task_group",
+        partialFilterExpression={"group_id": {"$exists": True}},
     )
     await submissions_collection.create_index(
         [("task_id", ASCENDING), ("submitted_at", ASCENDING)],
@@ -116,4 +133,29 @@ async def ensure_mongo_indexes() -> None:
         [("user_uid", ASCENDING)],
         unique=True,
         name="uniq_user_context_user_uid",
+    )
+    await group_sets_collection.create_index(
+        [("task_id", ASCENDING)],
+        unique=True,
+        name="uniq_group_sets_task_id",
+    )
+    await group_sets_collection.create_index(
+        [("subject_id", ASCENDING), ("created_at", ASCENDING)],
+        name="idx_group_sets_subject_created_at",
+    )
+    await groups_collection.create_index(
+        [("task_id", ASCENDING), ("name", ASCENDING)],
+        name="idx_groups_task_name",
+    )
+    await groups_collection.create_index(
+        [("task_id", ASCENDING)],
+        name="idx_groups_task_id",
+    )
+    await groups_collection.create_index(
+        [("member_uids", ASCENDING)],
+        name="idx_groups_member_uids",
+    )
+    await groups_collection.create_index(
+        [("group_set_id", ASCENDING)],
+        name="idx_groups_group_set_id",
     )

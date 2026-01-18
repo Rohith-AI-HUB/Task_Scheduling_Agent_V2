@@ -1,7 +1,15 @@
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
+
+
+TaskKind = Literal["individual", "group"]
+
+
+class TaskGroupSettings(BaseModel):
+    group_size: int = Field(ge=2, le=50)
+    shuffle: bool = True
 
 
 class TaskCreateRequest(BaseModel):
@@ -11,6 +19,9 @@ class TaskCreateRequest(BaseModel):
     deadline: Optional[datetime] = None
     points: Optional[int] = Field(default=None, ge=0)
     task_type: Optional[str] = Field(default=None, max_length=32)
+    type: TaskKind = "individual"
+    problem_statements: list[str] = Field(default_factory=list, max_length=50)
+    group_settings: Optional[TaskGroupSettings] = None
 
 
 class TaskUpdateRequest(BaseModel):
@@ -19,6 +30,9 @@ class TaskUpdateRequest(BaseModel):
     deadline: Optional[datetime] = None
     points: Optional[int] = Field(default=None, ge=0)
     task_type: Optional[str] = Field(default=None, max_length=32)
+    type: Optional[TaskKind] = None
+    problem_statements: Optional[list[str]] = None
+    group_settings: Optional[TaskGroupSettings] = None
 
 
 class TaskResponse(BaseModel):
@@ -29,6 +43,8 @@ class TaskResponse(BaseModel):
     deadline: Optional[datetime] = None
     points: Optional[int] = None
     task_type: Optional[str] = None
-    type: str
+    type: TaskKind
+    problem_statements: list[str] = Field(default_factory=list)
+    group_settings: Optional[TaskGroupSettings] = None
     created_at: datetime
     updated_at: datetime

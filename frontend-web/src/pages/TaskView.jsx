@@ -19,6 +19,14 @@ const TaskView = () => {
   const [attachmentsUploading, setAttachmentsUploading] = useState(false);
   const [attachmentsError, setAttachmentsError] = useState('');
   const [isDragActive, setIsDragActive] = useState(false);
+  const [myGroup, setMyGroup] = useState(null);
+  const [groupList, setGroupList] = useState([]);
+  const [groupListMeta, setGroupListMeta] = useState(null);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [groupsError, setGroupsError] = useState('');
+  const [groupSearch, setGroupSearch] = useState('');
+  const [groupSort, setGroupSort] = useState('name');
+  const [collapsedGroups, setCollapsedGroups] = useState({});
   const fileInputRef = useRef(null);
 
   const getErrorMessage = (err, fallback) => {
@@ -30,6 +38,7 @@ const TaskView = () => {
       return JSON.stringify(first);
     }
     if (detail && typeof detail === 'object') return JSON.stringify(detail);
+    if (typeof err?.message === 'string' && err.message) return err.message;
     return fallback;
   };
   const [gradeFeedback, setGradeFeedback] = useState({});
@@ -39,6 +48,31 @@ const TaskView = () => {
     () => submissions.filter((s) => s?.score === null || s?.score === undefined).length,
     [submissions]
   );
+  const groupById = useMemo(() => {
+    const map = new Map();
+    for (const g of groupList || []) {
+      if (g?.id) map.set(g.id, g);
+    }
+    return map;
+  }, [groupList]);
+  const visibleGroups = useMemo(() => {
+    const list = Array.isArray(groupList) ? [...groupList] : [];
+    const q = String(groupSearch || '').trim().toLowerCase();
+    const filtered = q
+      ? list.filter((g) => {
+          const name = String(g?.name || '').toLowerCase();
+          const members = (g?.member_uids || []).map((u) => String(u).toLowerCase()).join(' ');
+          return name.includes(q) || members.includes(q);
+        })
+      : list;
+
+    if (groupSort === 'size') {
+      filtered.sort((a, b) => (a?.member_uids?.length || 0) - (b?.member_uids?.length || 0));
+    } else {
+      filtered.sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')));
+    }
+    return filtered;
+  }, [groupList, groupSearch, groupSort]);
 
   const getInitials = (studentUid) => {
     const raw = String(studentUid || '').trim();
@@ -68,10 +102,12 @@ const TaskView = () => {
     setIsSubmitting(true);
     setSubmissionError('');
     try {
-      const response = await api.post('/submissions', {
-        task_id: id,
-        content: submissionContent,
-      });
+      const payload = { task_id: id, content: submissionContent };
+      if (task?.type === 'group') {
+        if (!myGroup?.id) throw new Error('Group not found');
+        payload.group_id = myGroup.id;
+      }
+      const response = await api.post('/submissions', payload);
       setMySubmission(response.data);
     } catch (err) {
       setSubmissionError(getErrorMessage(err, 'Failed to submit'));
@@ -101,10 +137,12 @@ const TaskView = () => {
 
   const ensureSubmissionForAttachments = async () => {
     if (mySubmission) return mySubmission;
-    const response = await api.post('/submissions', {
-      task_id: id,
-      content: submissionContent || '',
-    });
+    const payload = { task_id: id, content: submissionContent || '' };
+    if (task?.type === 'group') {
+      if (!myGroup?.id) throw new Error('Group not found');
+      payload.group_id = myGroup.id;
+    }
+    const response = await api.post('/submissions', payload);
     setMySubmission(response.data);
     return response.data;
   };
@@ -209,8 +247,47 @@ const TaskView = () => {
     loadSubmissions();
   }, [id, userRole]);
 
+  const loadGroups = async () => {
+    if (!id) return;
+    if (task?.type !== 'group') {
+      setMyGroup(null);
+      setGroupList([]);
+      setGroupListMeta(null);
+      return;
+    }
+
+    setGroupsLoading(true);
+    setGroupsError('');
+    try {
+      if (userRole === 'teacher') {
+        const response = await api.get('/groups', { params: { task_id: id } });
+        setGroupList(response.data?.groups || []);
+        setGroupListMeta(response.data || null);
+      } else if (userRole === 'student') {
+        try {
+          const response = await api.get('/groups/me', { params: { task_id: id } });
+          setMyGroup(response.data || null);
+        } catch (err) {
+          if (err?.response?.status === 404) {
+            setMyGroup(null);
+          } else {
+            throw err;
+          }
+        }
+      }
+    } catch (err) {
+      setGroupsError(getErrorMessage(err, 'Failed to load groups'));
+    } finally {
+      setGroupsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadGroups();
+  }, [id, userRole, task?.type]);
+
   return (
-    <div className="bg-background-light dark:bg-background-dark text-[#110d1c] dark:text-white min-h-screen font-display">
+    <div className="bg-background-light dark:bg-background-dark text-[#110d1c] dark:text-white h-screen overflow-y-auto overflow-x-hidden font-display">
       {userRole === 'teacher' ? (
         <>
           <header className="sticky top-0 z-50 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-[#eae6f4] dark:border-[#2a2438]">
@@ -312,6 +389,191 @@ const TaskView = () => {
                   </div>
                 </section>
 
+                {task.type === 'group' ? (
+                  <section className="mb-10">
+                    <div className="flex items-center justify-between mb-6 px-1 gap-4 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-primary">groups</span>
+                        <h3 className="text-xl font-bold text-[#110d1c] dark:text-white">Groups</h3>
+                      </div>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <input
+                          className="px-3 py-2 rounded-lg bg-white dark:bg-[#1c162e] border border-[#eae6f4] dark:border-[#2a2438] text-sm"
+                          placeholder="Search UID or group..."
+                          value={groupSearch}
+                          onChange={(e) => setGroupSearch(e.target.value)}
+                        />
+                        <select
+                          className="px-3 py-2 rounded-lg bg-white dark:bg-[#1c162e] border border-[#eae6f4] dark:border-[#2a2438] text-sm"
+                          value={groupSort}
+                          onChange={(e) => setGroupSort(e.target.value)}
+                        >
+                          <option value="name">Sort: Name</option>
+                          <option value="size">Sort: Size</option>
+                        </select>
+                        <button
+                          onClick={loadGroups}
+                          className="px-4 py-2 rounded-lg bg-white dark:bg-[#1c162e] border border-[#eae6f4] dark:border-[#2a2438] text-sm font-bold hover:border-primary/40 transition-colors disabled:opacity-60"
+                          disabled={groupsLoading}
+                          type="button"
+                        >
+                          Refresh
+                        </button>
+                        {!groupListMeta?.group_set_id ? (
+                          <button
+                            onClick={async () => {
+                              setGroupsLoading(true);
+                              setGroupsError('');
+                              try {
+                                const response = await api.post('/groups', { task_id: id, regenerate: false });
+                                setGroupList(response.data?.groups || []);
+                                setGroupListMeta(response.data || null);
+                              } catch (err) {
+                                setGroupsError(getErrorMessage(err, 'Failed to generate groups'));
+                              } finally {
+                                setGroupsLoading(false);
+                              }
+                            }}
+                            className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-colors disabled:opacity-60"
+                            disabled={groupsLoading}
+                            type="button"
+                          >
+                            Generate Groups
+                          </button>
+                        ) : (
+                          <button
+                            onClick={async () => {
+                              if (groupListMeta?.has_submissions) return;
+                              const ok = window.confirm('Regenerate groups? This cannot be undone.');
+                              if (!ok) return;
+                              setGroupsLoading(true);
+                              setGroupsError('');
+                              try {
+                                const response = await api.post('/groups', { task_id: id, regenerate: true });
+                                setGroupList(response.data?.groups || []);
+                                setGroupListMeta(response.data || null);
+                              } catch (err) {
+                                setGroupsError(getErrorMessage(err, 'Failed to regenerate groups'));
+                              } finally {
+                                setGroupsLoading(false);
+                              }
+                            }}
+                            className="px-4 py-2 rounded-lg bg-white dark:bg-[#1c162e] border border-[#eae6f4] dark:border-[#2a2438] text-sm font-bold hover:border-primary/40 transition-colors disabled:opacity-60"
+                            disabled={groupsLoading || !!groupListMeta?.has_submissions}
+                            type="button"
+                            title={groupListMeta?.has_submissions ? 'Disabled because submissions exist' : 'Regenerate groups'}
+                          >
+                            Regenerate Groups
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {groupsError ? (
+                      <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+                        {groupsError}
+                      </div>
+                    ) : null}
+
+                    {groupsLoading ? (
+                      <div className="text-[#5d479e] dark:text-[#a094c7]">Loading groups...</div>
+                    ) : !groupListMeta?.group_set_id ? (
+                      <div className="text-[#5d479e] dark:text-[#a094c7]">Groups not generated yet.</div>
+                    ) : visibleGroups.length === 0 ? (
+                      <div className="text-[#5d479e] dark:text-[#a094c7]">No groups found.</div>
+                    ) : (
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {visibleGroups.map((g) => {
+                          const isCollapsed = !!collapsedGroups[g.id];
+                          const hasSubmission = !!g.submission_id;
+                          return (
+                            <div
+                              key={g.id}
+                              className="bg-white dark:bg-[#1c162e] rounded-xl border border-[#eae6f4] dark:border-[#2a2438] overflow-hidden shadow-sm"
+                            >
+                              <div className="p-4 border-b border-[#eae6f4] dark:border-[#2a2438] bg-[#faf9fc] dark:bg-[#221b36] flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="font-bold text-[#110d1c] dark:text-white">{g.name}</h4>
+                                    <span className="text-xs font-semibold px-2 py-0.5 rounded bg-primary/10 text-primary">
+                                      {g.member_uids?.length || 0} members
+                                    </span>
+                                    {hasSubmission ? (
+                                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                        Submitted
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                                        Not submitted
+                                      </span>
+                                    )}
+                                  </div>
+                                  {g.assigned_problem_statement ? (
+                                    <div className="mt-1 text-sm text-[#5d479e] dark:text-[#a094c7]">
+                                      Problem: {g.assigned_problem_statement}
+                                    </div>
+                                  ) : null}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {g.submission_id ? (
+                                    <button
+                                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-[#1c162e] border border-[#eae6f4] dark:border-[#2a2438] hover:border-primary/40 transition-colors"
+                                      type="button"
+                                      onClick={() => {
+                                        const el = document.getElementById(`submission-${g.submission_id}`);
+                                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                      }}
+                                    >
+                                      View Submission
+                                    </button>
+                                  ) : null}
+                                  <button
+                                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-[#1c162e] border border-[#eae6f4] dark:border-[#2a2438] hover:border-primary/40 transition-colors"
+                                    type="button"
+                                    onClick={() => setCollapsedGroups((p) => ({ ...p, [g.id]: !p[g.id] }))}
+                                  >
+                                    {isCollapsed ? 'Expand' : 'Collapse'}
+                                  </button>
+                                </div>
+                              </div>
+                              {!isCollapsed ? (
+                                <div className="p-4">
+                                  <div className="flex flex-wrap gap-2">
+                                    {(g.member_uids || []).map((uid) => (
+                                      <button
+                                        key={uid}
+                                        type="button"
+                                        className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[#f0eff5] dark:bg-[#251e3b] text-[#3d2a78] dark:text-[#c0bad3] hover:opacity-80 transition-opacity"
+                                        onClick={async () => {
+                                          try {
+                                            await navigator.clipboard.writeText(String(uid));
+                                          } catch (_e) {
+                                            setGroupsError('Copy failed');
+                                          }
+                                        }}
+                                        title="Copy UID"
+                                      >
+                                        {uid}
+                                      </button>
+                                    ))}
+                                  </div>
+                                  {g.submission_id ? (
+                                    <div className="mt-3 text-xs text-[#5d479e] dark:text-[#a094c7]">
+                                      Last update:{' '}
+                                      {g.submission_updated_at ? new Date(g.submission_updated_at).toLocaleString() : '—'} by{' '}
+                                      {g.submitted_by_uid || '—'}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </section>
+                ) : null}
+
                 <section>
                   <div className="flex items-center justify-between mb-6 px-1 gap-4">
                     <div className="flex items-center gap-2">
@@ -341,9 +603,11 @@ const TaskView = () => {
                     <div className="space-y-6">
                       {submissions.map((s) => {
                         const isUngraded = s?.score === null || s?.score === undefined;
+                        const group = s?.group_id ? groupById.get(s.group_id) : null;
                         return (
                           <div
                             key={s.id}
+                            id={`submission-${s.id}`}
                             className="bg-white dark:bg-[#1c162e] rounded-xl border border-[#eae6f4] dark:border-[#2a2438] overflow-hidden shadow-sm"
                           >
                             <div className="p-5 border-b border-[#eae6f4] dark:border-[#2a2438] flex justify-between items-center bg-[#faf9fc] dark:bg-[#221b36] gap-4">
@@ -355,6 +619,9 @@ const TaskView = () => {
                                   <h4 className="font-bold text-sm text-[#110d1c] dark:text-white uppercase tracking-tight">
                                     Student UID: {s.student_uid}
                                   </h4>
+                                  {group ? (
+                                    <p className="text-xs text-[#5d479e] dark:text-[#a094c7]">Group: {group.name}</p>
+                                  ) : null}
                                   <p className="text-xs text-[#5d479e] dark:text-[#a094c7]">
                                     Submitted {s.submitted_at ? new Date(s.submitted_at).toLocaleString() : '—'}
                                   </p>
@@ -481,7 +748,7 @@ const TaskView = () => {
           </main>
         </>
       ) : (
-        <div className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
+        <div className="relative flex h-screen w-full flex-col overflow-y-auto overflow-x-hidden">
           <div className="layout-container flex h-full grow flex-col">
             <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-[#eae6f4] dark:border-white/10 bg-white dark:bg-background-dark px-6 md:px-10 py-3 sticky top-0 z-50">
               <div className="flex items-center gap-4 text-primary">
@@ -596,6 +863,60 @@ const TaskView = () => {
                         </p>
                       </div>
                     </div>
+
+                    {task.type === 'group' ? (
+                      <div className="bg-white dark:bg-background-dark border border-[#d5cee9] dark:border-white/10 rounded-xl overflow-hidden mb-8 shadow-sm">
+                        <div className="px-6 py-5 border-b border-[#d5cee9] dark:border-white/10 bg-gray-50/50 dark:bg-white/5 flex items-center justify-between gap-4">
+                          <h2 className="text-[#110d1c] dark:text-white text-xl font-bold leading-tight tracking-tight">
+                            Your Group
+                          </h2>
+                          <button
+                            className="px-4 py-2 rounded-lg border border-[#d5cee9] dark:border-white/10 hover:border-primary/40 transition-colors text-sm font-bold"
+                            onClick={loadGroups}
+                            disabled={groupsLoading}
+                            type="button"
+                          >
+                            Refresh
+                          </button>
+                        </div>
+                        <div className="p-6">
+                          {groupsError ? (
+                            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+                              {groupsError}
+                            </div>
+                          ) : null}
+                          {groupsLoading ? (
+                            <div className="text-gray-600 dark:text-gray-300">Loading group...</div>
+                          ) : myGroup ? (
+                            <div className="flex flex-col gap-3">
+                              {myGroup.assigned_problem_statement ? (
+                                <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                                  <span className="font-semibold">Assigned Problem:</span> {myGroup.assigned_problem_statement}
+                                </div>
+                              ) : null}
+                              <div className="flex flex-wrap gap-2">
+                                {(myGroup.member_uids || []).map((uid) => (
+                                  <span
+                                    key={uid}
+                                    className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[#f0eff5] dark:bg-[#251e3b] text-[#3d2a78] dark:text-[#c0bad3]"
+                                  >
+                                    {uid}
+                                  </span>
+                                ))}
+                              </div>
+                              {mySubmission?.group_id ? (
+                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                                  Last updated {mySubmission.updated_at ? new Date(mySubmission.updated_at).toLocaleString() : '—'} by{' '}
+                                  {mySubmission.student_uid || '—'}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <div className="text-gray-600 dark:text-gray-300">Groups not available yet.</div>
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
 
                     <div className="bg-white dark:bg-background-dark border border-[#d5cee9] dark:border-white/10 rounded-xl overflow-hidden mb-8 shadow-sm">
                       <div className="px-6 py-5 border-b border-[#d5cee9] dark:border-white/10 bg-gray-50/50 dark:bg-white/5">
@@ -739,7 +1060,12 @@ const TaskView = () => {
                       <button
                         className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 px-6 rounded-xl shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
                         onClick={submitOrUpdate}
-                        disabled={!submissionContent.trim() || isSubmitting || submissionLoading}
+                        disabled={
+                          !submissionContent.trim() ||
+                          isSubmitting ||
+                          submissionLoading ||
+                          (task?.type === 'group' && !myGroup?.id)
+                        }
                         type="button"
                       >
                         <span className="material-symbols-outlined">send</span>

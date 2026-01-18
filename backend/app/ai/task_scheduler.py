@@ -27,8 +27,27 @@ class TaskScheduler:
             return AIScheduleResponse(generated_at=datetime.utcnow(), tasks=[])
 
         tasks = await tasks_collection.find({"subject_id": {"$in": subject_oids}}).to_list(length=None)
-        submissions = await submissions_collection.find({"student_uid": user_uid}).to_list(length=None)
-        submitted_task_ids = {s.get("task_id") for s in submissions if s.get("task_id")}
+        submitted_task_ids: set[Any] = set()
+
+        individual_submissions = await submissions_collection.find(
+            {"student_uid": user_uid, "group_id": None}
+        ).to_list(length=None)
+        submitted_task_ids.update({s.get("task_id") for s in individual_submissions if s.get("task_id")})
+
+        group_task_ids = [t["_id"] for t in tasks if t.get("type") == "group" and t.get("_id")]
+        if group_task_ids:
+            groups_collection = get_collection("groups")
+            groups = await groups_collection.find(
+                {"task_id": {"$in": group_task_ids}, "member_uids": user_uid}
+            ).to_list(length=None)
+            group_ids = [g.get("_id") for g in groups if g.get("_id")]
+            if group_ids:
+                group_submissions = await submissions_collection.find(
+                    {"group_id": {"$in": group_ids}}
+                ).to_list(length=None)
+                submitted_task_ids.update(
+                    {s.get("task_id") for s in group_submissions if s.get("task_id")}
+                )
 
         candidate_tasks: list[dict] = []
         for t in tasks:

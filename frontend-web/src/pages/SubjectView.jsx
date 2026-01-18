@@ -20,6 +20,11 @@ const SubjectView = () => {
   const [taskDeadline, setTaskDeadline] = useState('');
   const [taskPoints, setTaskPoints] = useState('');
   const [taskType, setTaskType] = useState('');
+  const [taskKind, setTaskKind] = useState('individual');
+  const [groupSize, setGroupSize] = useState('3');
+  const [problemStatements, setProblemStatements] = useState(['']);
+  const [bulkProblems, setBulkProblems] = useState('');
+  const [previewNonce, setPreviewNonce] = useState(0);
   const [taskCreateError, setTaskCreateError] = useState('');
   const [taskCreating, setTaskCreating] = useState(false);
   const [sortMode, setSortMode] = useState('deadline');
@@ -41,8 +46,52 @@ const SubjectView = () => {
       return JSON.stringify(first);
     }
     if (detail && typeof detail === 'object') return JSON.stringify(detail);
+    if (typeof err?.message === 'string' && err.message) return err.message;
     return fallback;
   };
+
+  const groupPreview = useMemo(() => {
+    if (taskKind !== 'group') return null;
+    const size = Number(groupSize);
+    if (!Number.isFinite(size) || size < 2) return null;
+    const students = (roster || []).map((s) => s?.uid).filter(Boolean);
+    if (students.length === 0) return { groupCount: 0, groups: [] };
+
+    const shuffled = [...students];
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const r = (Math.random() + previewNonce * 0.000001) % 1;
+      const j = Math.floor(r * (i + 1));
+      const tmp = shuffled[i];
+      shuffled[i] = shuffled[j];
+      shuffled[j] = tmp;
+    }
+
+    const fullCount = Math.floor(shuffled.length / size);
+    const remainder = shuffled.length % size;
+    const groups = [];
+    let idx = 0;
+    for (let k = 0; k < fullCount; k += 1) {
+      groups.push(shuffled.slice(idx, idx + size));
+      idx += size;
+    }
+    if (remainder) {
+      const leftover = shuffled.slice(idx);
+      if (groups.length === 0) {
+        groups.push(leftover);
+      } else {
+        leftover.forEach((uid, i) => {
+          groups[i % groups.length].push(uid);
+        });
+      }
+    }
+
+    const normalizedProblems = (problemStatements || []).map((p) => String(p || '').trim()).filter(Boolean);
+    const preview = groups.slice(0, 3).map((members, i) => ({
+      members,
+      problem: normalizedProblems.length ? normalizedProblems[i % normalizedProblems.length] : null,
+    }));
+    return { groupCount: groups.length, groups: preview };
+  }, [taskKind, groupSize, problemStatements, roster, previewNonce]);
 
   useEffect(() => {
     const load = async () => {
@@ -781,7 +830,7 @@ const SubjectView = () => {
               setIsCreateTaskOpen(false);
             }}
           ></div>
-          <div className="relative bg-white dark:bg-[#1c1633] w-full max-w-[600px] rounded-2xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-700">
+          <div className="relative bg-white dark:bg-[#1c1633] w-full max-w-[600px] max-h-[90vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-700">
             <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
               <h2 className="text-xl font-bold text-[#110d1c] dark:text-white">Create New Task</h2>
               <button
@@ -795,7 +844,7 @@ const SubjectView = () => {
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-6 flex-1 min-h-0 overflow-y-auto">
               {taskCreateError && (
                 <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
                   {taskCreateError}
@@ -818,6 +867,45 @@ const SubjectView = () => {
                     disabled={taskCreating}
                   />
                 </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                    Individual vs Group
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className={`px-4 py-2 rounded-lg text-sm font-bold border transition-colors ${
+                        taskKind === 'individual'
+                          ? 'bg-primary text-white border-primary'
+                          : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:border-primary/40'
+                      }`}
+                      onClick={() => {
+                        if (taskCreating) return;
+                        setTaskKind('individual');
+                        setTaskCreateError('');
+                      }}
+                      disabled={taskCreating}
+                    >
+                      Individual
+                    </button>
+                    <button
+                      type="button"
+                      className={`px-4 py-2 rounded-lg text-sm font-bold border transition-colors ${
+                        taskKind === 'group'
+                          ? 'bg-primary text-white border-primary'
+                          : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:border-primary/40'
+                      }`}
+                      onClick={() => {
+                        if (taskCreating) return;
+                        setTaskKind('group');
+                        setTaskCreateError('');
+                      }}
+                      disabled={taskCreating}
+                    >
+                      Group
+                    </button>
+                  </div>
+                </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Deadline</label>
                   <input
@@ -831,8 +919,28 @@ const SubjectView = () => {
                     disabled={taskCreating}
                   />
                 </div>
+                {taskKind === 'group' ? (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                      Group Size
+                    </label>
+                    <input
+                      className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                      type="number"
+                      min={2}
+                      value={groupSize}
+                      onChange={(e) => {
+                        setGroupSize(e.target.value);
+                        setTaskCreateError('');
+                      }}
+                      disabled={taskCreating}
+                    />
+                  </div>
+                ) : null}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Points</label>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                    {taskKind === 'group' ? 'Points (optional)' : 'Points'}
+                  </label>
                   <input
                     className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
                     type="number"
@@ -878,6 +986,152 @@ const SubjectView = () => {
                     disabled={taskCreating}
                   ></textarea>
                 </div>
+                {taskKind === 'group' ? (
+                  <div className="md:col-span-2 space-y-3">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">Problem Statements</label>
+                      <button
+                        type="button"
+                        className="px-4 py-2 rounded-lg text-sm font-bold border border-gray-300 dark:border-gray-600 hover:border-primary/40 transition-colors"
+                        onClick={() => {
+                          setProblemStatements((prev) => [...(prev || []), '']);
+                        }}
+                        disabled={taskCreating}
+                      >
+                        Add
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      {(problemStatements || []).map((p, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <input
+                            className="flex-1 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                            type="text"
+                            placeholder={`Problem ${idx + 1}`}
+                            value={p}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setProblemStatements((prev) =>
+                                (prev || []).map((x, i) => (i === idx ? v : x))
+                              );
+                              setTaskCreateError('');
+                            }}
+                            disabled={taskCreating}
+                          />
+                          <button
+                            type="button"
+                            className="px-2 py-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:border-primary/40 transition-colors disabled:opacity-50"
+                            onClick={() => {
+                              if (idx === 0) return;
+                              setProblemStatements((prev) => {
+                                const next = [...(prev || [])];
+                                const tmp = next[idx - 1];
+                                next[idx - 1] = next[idx];
+                                next[idx] = tmp;
+                                return next;
+                              });
+                            }}
+                            disabled={taskCreating || idx === 0}
+                            title="Move up"
+                          >
+                            <span className="material-symbols-outlined text-base">arrow_upward</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="px-2 py-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:border-primary/40 transition-colors disabled:opacity-50"
+                            onClick={() => {
+                              setProblemStatements((prev) => {
+                                const next = [...(prev || [])];
+                                if (idx >= next.length - 1) return next;
+                                const tmp = next[idx + 1];
+                                next[idx + 1] = next[idx];
+                                next[idx] = tmp;
+                                return next;
+                              });
+                            }}
+                            disabled={taskCreating || idx === (problemStatements || []).length - 1}
+                            title="Move down"
+                          >
+                            <span className="material-symbols-outlined text-base">arrow_downward</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="px-2 py-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:border-red-400 transition-colors"
+                            onClick={() => {
+                              setProblemStatements((prev) => (prev || []).filter((_, i) => i !== idx));
+                            }}
+                            disabled={taskCreating}
+                            title="Remove"
+                          >
+                            <span className="material-symbols-outlined text-base">delete</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2 tracking-widest">
+                        Bulk paste (one per line)
+                      </label>
+                      <textarea
+                        className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                        rows="3"
+                        value={bulkProblems}
+                        onChange={(e) => setBulkProblems(e.target.value)}
+                        disabled={taskCreating}
+                      ></textarea>
+                      <div className="mt-2 flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="px-4 py-2 rounded-lg text-sm font-bold border border-gray-300 dark:border-gray-600 hover:border-primary/40 transition-colors disabled:opacity-60"
+                          onClick={() => {
+                            const lines = String(bulkProblems || '')
+                              .split('\n')
+                              .map((x) => x.trim())
+                              .filter(Boolean);
+                            if (lines.length === 0) return;
+                            setProblemStatements((prev) => {
+                              const existing = (prev || []).map((x) => String(x || '').trim()).filter(Boolean);
+                              return [...existing, ...lines];
+                            });
+                            setBulkProblems('');
+                          }}
+                          disabled={taskCreating}
+                        >
+                          Add Lines
+                        </button>
+                        <button
+                          type="button"
+                          className="px-4 py-2 rounded-lg text-sm font-bold border border-gray-300 dark:border-gray-600 hover:border-primary/40 transition-colors disabled:opacity-60"
+                          onClick={() => setPreviewNonce((n) => n + 1)}
+                          disabled={taskCreating}
+                        >
+                          Shuffle Preview
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-[#eae6f4] dark:border-[#2a2438] bg-[#faf9fc] dark:bg-[#221b36]">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="text-sm font-bold text-[#110d1c] dark:text-white">Group Preview</div>
+                        <div className="text-xs text-[#5d479e] dark:text-[#a094c7]">
+                          {groupPreview ? `Estimated groups: ${groupPreview.groupCount}` : 'Set group size to preview'}
+                        </div>
+                      </div>
+                      {groupPreview && groupPreview.groups.length > 0 ? (
+                        <div className="mt-3 space-y-2">
+                          {groupPreview.groups.map((g, i) => (
+                            <div key={i} className="text-sm text-[#4b3d75] dark:text-[#c0bad3]">
+                              <span className="font-semibold">Group {i + 1}:</span> {g.members.join(', ')}
+                              {g.problem ? <span className="ml-2 text-xs text-primary">({g.problem})</span> : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
             <div className="p-6 bg-gray-50 dark:bg-gray-900/50 flex justify-end gap-3">
@@ -905,7 +1159,15 @@ const SubjectView = () => {
                       deadline: taskDeadline ? new Date(taskDeadline).toISOString() : null,
                       points: taskPoints !== '' ? Number(taskPoints) : null,
                       task_type: taskType ? taskType : null,
+                      type: taskKind,
                     };
+                    if (taskKind === 'group') {
+                      const size = Number(groupSize);
+                      if (!Number.isFinite(size) || size < 2) throw new Error('Group size must be at least 2');
+                      const problems = (problemStatements || []).map((p) => String(p || '').trim()).filter(Boolean);
+                      payload.problem_statements = problems;
+                      payload.group_settings = { group_size: size, shuffle: true };
+                    }
                     const response = await api.post('/tasks', payload);
                     setTasks((prev) => [response.data, ...prev]);
                     setTaskTitle('');
@@ -913,14 +1175,23 @@ const SubjectView = () => {
                     setTaskDeadline('');
                     setTaskPoints('');
                     setTaskType('');
+                    setTaskKind('individual');
+                    setGroupSize('3');
+                    setProblemStatements(['']);
+                    setBulkProblems('');
+                    setPreviewNonce(0);
                     setIsCreateTaskOpen(false);
                   } catch (err) {
-                    setTaskCreateError(err?.response?.data?.detail || 'Failed to create task');
+                    setTaskCreateError(getErrorMessage(err, 'Failed to create task'));
                   } finally {
                     setTaskCreating(false);
                   }
                 }}
-                disabled={!taskTitle.trim() || taskCreating}
+                disabled={
+                  !taskTitle.trim() ||
+                  taskCreating ||
+                  (taskKind === 'group' && (!Number.isFinite(Number(groupSize)) || Number(groupSize) < 2))
+                }
                 type="button"
               >
                 {taskCreating ? 'Publishing...' : 'Publish Task'}

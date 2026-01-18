@@ -20,6 +20,8 @@ def _serialize_task(doc: dict) -> TaskResponse:
         points=doc.get("points"),
         task_type=doc.get("task_type"),
         type=doc.get("type", "individual"),
+        problem_statements=list(doc.get("problem_statements") or []),
+        group_settings=doc.get("group_settings"),
         created_at=doc["created_at"],
         updated_at=doc["updated_at"],
     )
@@ -66,6 +68,9 @@ async def create_task(
     await _ensure_teacher_owns_subject(current_teacher["uid"], subject_oid)
 
     now = datetime.utcnow()
+    normalized_problem_statements = [
+        s.strip() for s in (request.problem_statements or []) if isinstance(s, str) and s.strip()
+    ]
     task_doc = {
         "subject_id": subject_oid,
         "title": request.title.strip(),
@@ -73,10 +78,17 @@ async def create_task(
         "deadline": request.deadline,
         "points": request.points,
         "task_type": request.task_type.strip() if request.task_type else None,
-        "type": "individual",
+        "type": request.type,
+        "problem_statements": normalized_problem_statements if request.type == "group" else [],
+        "group_settings": request.group_settings.model_dump() if request.type == "group" and request.group_settings else None,
         "created_at": now,
         "updated_at": now,
     }
+    if request.type == "group" and not request.group_settings:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="group_settings is required for group tasks",
+        )
 
     tasks_collection = get_collection("tasks")
     result = await tasks_collection.insert_one(task_doc)
@@ -172,6 +184,19 @@ async def update_task(
         update["points"] = request.points
     if request.task_type is not None:
         update["task_type"] = request.task_type.strip() if request.task_type else None
+    if request.type is not None:
+        update["type"] = request.type
+        if request.type != "group":
+            update["problem_statements"] = []
+            update["group_settings"] = None
+    if request.problem_statements is not None:
+        update["problem_statements"] = [
+            s.strip()
+            for s in (request.problem_statements or [])
+            if isinstance(s, str) and s.strip()
+        ]
+    if request.group_settings is not None:
+        update["group_settings"] = request.group_settings.model_dump()
 
     tasks_collection = get_collection("tasks")
     await tasks_collection.update_one({"_id": task["_id"]}, {"$set": update})

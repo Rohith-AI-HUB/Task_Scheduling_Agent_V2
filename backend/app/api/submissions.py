@@ -49,6 +49,7 @@ def _serialize_submission(doc: dict) -> SubmissionResponse:
         task_id=str(doc["task_id"]),
         subject_id=str(doc["subject_id"]),
         student_uid=doc["student_uid"],
+        group_id=str(doc["group_id"]) if doc.get("group_id") is not None else None,
         content=doc["content"],
         submitted_at=doc["submitted_at"],
         created_at=doc["created_at"],
@@ -146,7 +147,7 @@ async def upsert_submission(
 
     submissions_collection = get_collection("submissions")
     now = datetime.utcnow()
-    doc = {
+    doc: dict = {
         "task_id": task_oid,
         "subject_id": subject_oid,
         "student_uid": current_student["uid"],
@@ -155,9 +156,24 @@ async def upsert_submission(
         "updated_at": now,
     }
 
-    existing = await submissions_collection.find_one(
-        {"task_id": task_oid, "student_uid": current_student["uid"]}
-    )
+    task_type = task.get("type", "individual")
+    if task_type == "group":
+        if not request.group_id or not ObjectId.is_valid(request.group_id):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="group_id is required")
+        group_oid = ObjectId(request.group_id)
+        groups_collection = get_collection("groups")
+        group = await groups_collection.find_one(
+            {"_id": group_oid, "task_id": task_oid, "member_uids": current_student["uid"]}
+        )
+        if not group:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        doc["group_id"] = group_oid
+        existing = await submissions_collection.find_one({"task_id": task_oid, "group_id": group_oid})
+    else:
+        existing = await submissions_collection.find_one(
+            {"task_id": task_oid, "student_uid": current_student["uid"], "group_id": None}
+        )
+
     if existing:
         await submissions_collection.update_one({"_id": existing["_id"]}, {"$set": doc})
         updated = await submissions_collection.find_one({"_id": existing["_id"]})
@@ -170,9 +186,12 @@ async def upsert_submission(
     try:
         result = await submissions_collection.insert_one(doc)
     except DuplicateKeyError:
-        existing = await submissions_collection.find_one(
-            {"task_id": task_oid, "student_uid": current_student["uid"]}
-        )
+        if task_type == "group":
+            existing = await submissions_collection.find_one({"task_id": task_oid, "group_id": doc.get("group_id")})
+        else:
+            existing = await submissions_collection.find_one(
+                {"task_id": task_oid, "student_uid": current_student["uid"], "group_id": None}
+            )
         if existing:
             await submissions_collection.update_one({"_id": existing["_id"]}, {"$set": doc})
             updated = await submissions_collection.find_one({"_id": existing["_id"]})
@@ -196,10 +215,22 @@ async def get_my_submission(
     await _ensure_student_enrolled(current_student["uid"], subject_oid)
 
     submissions_collection = get_collection("submissions")
-    submission = await submissions_collection.find_one(
-        {"task_id": task_oid, "student_uid": current_student["uid"]},
-        sort=[("submitted_at", -1), ("_id", -1)],
-    )
+    if task.get("type", "individual") == "group":
+        groups_collection = get_collection("groups")
+        group = await groups_collection.find_one(
+            {"task_id": task_oid, "member_uids": current_student["uid"]}
+        )
+        if not group:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found")
+        submission = await submissions_collection.find_one(
+            {"task_id": task_oid, "group_id": group["_id"]},
+            sort=[("submitted_at", -1), ("_id", -1)],
+        )
+    else:
+        submission = await submissions_collection.find_one(
+            {"task_id": task_oid, "student_uid": current_student["uid"], "group_id": None},
+            sort=[("submitted_at", -1), ("_id", -1)],
+        )
     if not submission:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found")
     return _serialize_submission(submission)
@@ -217,11 +248,35 @@ async def list_my_submissions(
     await _ensure_student_enrolled(current_student["uid"], subject_oid)
 
     submissions_collection = get_collection("submissions")
-    submissions = await (
-        submissions_collection.find({"subject_id": subject_oid, "student_uid": current_student["uid"]})
+    tasks_collection = get_collection("tasks")
+    tasks = await tasks_collection.find({"subject_id": subject_oid}).to_list(length=None)
+    group_task_ids = [t["_id"] for t in tasks if t.get("type") == "group" and t.get("_id")]
+
+    submissions: list[dict] = []
+    individual_submissions = await (
+        submissions_collection.find(
+            {"subject_id": subject_oid, "student_uid": current_student["uid"], "group_id": None}
+        )
         .sort([("submitted_at", -1), ("_id", -1)])
         .to_list(length=None)
     )
+    submissions.extend(individual_submissions)
+
+    if group_task_ids:
+        groups_collection = get_collection("groups")
+        groups = await groups_collection.find(
+            {"task_id": {"$in": group_task_ids}, "member_uids": current_student["uid"]}
+        ).to_list(length=None)
+        group_ids = [g["_id"] for g in groups if g.get("_id")]
+        if group_ids:
+            group_submissions = await (
+                submissions_collection.find({"subject_id": subject_oid, "group_id": {"$in": group_ids}})
+                .sort([("submitted_at", -1), ("_id", -1)])
+                .to_list(length=None)
+            )
+            submissions.extend(group_submissions)
+
+    submissions.sort(key=lambda s: (s.get("submitted_at") or datetime.min), reverse=True)
     return [_serialize_submission(s) for s in submissions]
 
 
@@ -239,8 +294,14 @@ async def upload_attachments(
     submission_oid = ObjectId(submission_id)
     submission = await _find_submission_or_404(submission_oid)
 
-    if submission.get("student_uid") != current_student["uid"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    if submission.get("group_id") is not None:
+        groups_collection = get_collection("groups")
+        group = await groups_collection.find_one({"_id": submission["group_id"], "member_uids": current_student["uid"]})
+        if not group:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    else:
+        if submission.get("student_uid") != current_student["uid"]:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     task = await _find_task_or_404(submission["task_id"])
     await _ensure_student_enrolled(current_student["uid"], task["subject_id"])
@@ -306,8 +367,14 @@ async def download_attachment(
     if current_user.get("role") == "teacher":
         await _ensure_teacher_owns_subject(current_user["uid"], subject_oid)
     else:
-        if submission.get("student_uid") != current_user.get("uid"):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if submission.get("group_id") is not None:
+            groups_collection = get_collection("groups")
+            group = await groups_collection.find_one({"_id": submission["group_id"], "member_uids": current_user["uid"]})
+            if not group:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        else:
+            if submission.get("student_uid") != current_user.get("uid"):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
         await _ensure_student_enrolled(current_user["uid"], subject_oid)
 
     attachment = None
@@ -343,8 +410,14 @@ async def delete_attachment(
 
     submission_oid = ObjectId(submission_id)
     submission = await _find_submission_or_404(submission_oid)
-    if submission.get("student_uid") != current_student["uid"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    if submission.get("group_id") is not None:
+        groups_collection = get_collection("groups")
+        group = await groups_collection.find_one({"_id": submission["group_id"], "member_uids": current_student["uid"]})
+        if not group:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    else:
+        if submission.get("student_uid") != current_student["uid"]:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     target = None
     for a in submission.get("attachments") or []:
