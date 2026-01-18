@@ -522,6 +522,88 @@ async def get_evaluation(
     return SubmissionEvaluation.model_validate(evaluation)
 
 
+@router.get("/{submission_id}/evaluation/progress")
+async def get_evaluation_progress(
+    submission_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Lightweight endpoint for polling evaluation progress.
+    Returns current status and progress percentage.
+    """
+    if not ObjectId.is_valid(submission_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid submission id")
+
+    submission_oid = ObjectId(submission_id)
+    submissions_collection = get_collection("submissions")
+    submission = await submissions_collection.find_one({"_id": submission_oid})
+
+    if not submission:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found")
+
+    task = await _find_task_or_404(submission["task_id"])
+    subject_oid = task["subject_id"]
+
+    # Access control
+    if current_user.get("role") == "teacher":
+        await _ensure_teacher_owns_subject(current_user["uid"], subject_oid)
+    else:
+        if submission.get("group_id") is not None:
+            groups_collection = get_collection("groups")
+            group = await groups_collection.find_one({"_id": submission["group_id"], "member_uids": current_user["uid"]})
+            if not group:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        else:
+            if submission.get("student_uid") != current_user.get("uid"):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        await _ensure_student_enrolled(current_user["uid"], subject_oid)
+
+    evaluation = submission.get("evaluation")
+    if not evaluation or not isinstance(evaluation, dict):
+        return {
+            "status": "not_started",
+            "progress": 0,
+            "message": "Evaluation not started",
+        }
+
+    eval_status = str(evaluation.get("status", "pending")).lower()
+
+    # Calculate progress percentage based on status
+    progress_map = {
+        "pending": 10,
+        "running": 50,
+        "completed": 100,
+        "failed": 100,
+    }
+
+    progress = progress_map.get(eval_status, 0)
+
+    # Generate status message
+    messages = {
+        "pending": "Evaluation queued...",
+        "running": "Evaluating submission...",
+        "completed": "Evaluation complete",
+        "failed": "Evaluation failed",
+    }
+
+    message = messages.get(eval_status, "Unknown status")
+
+    # Add score if completed
+    response = {
+        "status": eval_status,
+        "progress": progress,
+        "message": message,
+    }
+
+    if eval_status == "completed":
+        response["ai_score"] = evaluation.get("ai_score")
+
+    if eval_status == "failed":
+        response["error"] = evaluation.get("last_error")
+
+    return response
+
+
 @router.post("/batch/evaluate", response_model=BatchEvaluateResponse)
 async def batch_evaluate(
     request: BatchEvaluateRequest,

@@ -1,6 +1,10 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Query
 from datetime import datetime
 from pymongo.errors import DuplicateKeyError
+from pydantic import BaseModel, EmailStr, Field
+from typing import Optional
+import logging
+
 from app.models.user import (
     RegisterRequest,
     LoginRequest,
@@ -8,10 +12,25 @@ from app.models.user import (
     UserCreate,
 )
 from app.utils.firebase_verify import verify_firebase_token, get_firebase_user
-from app.utils.dependencies import get_current_user
+from app.utils.dependencies import get_current_user, get_current_teacher
 from app.database.collections import get_collection
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+class UserUpdateRequest(BaseModel):
+    """Request model for updating user profile"""
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    email: Optional[EmailStr] = None
+
+
+class UserListResponse(BaseModel):
+    """Response model for user listing"""
+    users: list[UserResponse]
+    total: int
+    page: int
+    page_size: int
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -28,9 +47,10 @@ async def register(request: RegisterRequest):
 
         # Ensure the UID matches
         if token_data["uid"] != request.uid:
+            logger.warning(f"UID mismatch during registration: token={token_data['uid']}, request={request.uid}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Token UID does not match request UID"
+                detail="Authentication failed"
             )
 
         # Check if user already exists
@@ -41,10 +61,12 @@ async def register(request: RegisterRequest):
         )
 
         if existing_user:
+            logger.info(f"User already registered: uid={request.uid}, email={request.email}")
             return UserResponse(**existing_user)
 
         # Validate role
         if request.role not in ["teacher", "student"]:
+            logger.warning(f"Invalid role during registration: role={request.role}, uid={request.uid}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid role. Must be 'teacher' or 'student'"
@@ -62,7 +84,9 @@ async def register(request: RegisterRequest):
 
         try:
             await users_collection.insert_one(user_data)
+            logger.info(f"User registered successfully: uid={request.uid}, email={request.email}, role={request.role}")
         except DuplicateKeyError:
+            logger.warning(f"Duplicate key during registration: uid={request.uid}")
             created_user = await users_collection.find_one(
                 {"uid": request.uid},
                 sort=[("updated_at", -1), ("_id", -1)],
@@ -71,7 +95,7 @@ async def register(request: RegisterRequest):
                 return UserResponse(**created_user)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create user"
+                detail="User registration failed"
             )
 
         created_user = await users_collection.find_one(
@@ -79,18 +103,20 @@ async def register(request: RegisterRequest):
             sort=[("updated_at", -1), ("_id", -1)],
         )
         if not created_user:
+            logger.error(f"Failed to retrieve created user: uid={request.uid}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create user"
+                detail="User registration failed"
             )
         return UserResponse(**created_user)
 
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Registration error: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Registration failed: {str(e)}"
+            detail="Registration failed"
         )
 
 
@@ -116,7 +142,8 @@ async def login(request: LoginRequest):
 
         # If user doesn't exist, create them (for Google Sign-In)
         if not user:
-            if request.role not in ["teacher", "student"]:
+            if not request.role or request.role not in ["teacher", "student"]:
+                logger.warning(f"First-time login without valid role: uid={uid}")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Role is required for first-time login (teacher or student)"
@@ -131,7 +158,7 @@ async def login(request: LoginRequest):
                 email = request.email
                 name = request.name
 
-            # Create user with role from request (defaults to 'student')
+            # Create user with role from request
             user_data = {
                 "uid": uid,
                 "email": email,
@@ -143,7 +170,9 @@ async def login(request: LoginRequest):
 
             try:
                 await users_collection.insert_one(user_data)
+                logger.info(f"User created during login: uid={uid}, email={email}, role={request.role}")
             except DuplicateKeyError:
+                logger.warning(f"Duplicate key during login auto-registration: uid={uid}")
                 user = await users_collection.find_one(
                     {"uid": uid},
                     sort=[("updated_at", -1), ("_id", -1)],
@@ -155,18 +184,22 @@ async def login(request: LoginRequest):
                 )
 
         if not user:
+            logger.error(f"Login failed: user not found after creation: uid={uid}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Login failed"
             )
+
+        logger.info(f"User logged in: uid={uid}, role={user.get('role')}")
         return UserResponse(**user)
 
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Login error: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Login failed: {str(e)}"
+            detail="Login failed"
         )
 
 
@@ -178,6 +211,168 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     This endpoint requires authentication (Bearer token in Authorization header)
     """
     return UserResponse(**current_user)
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_profile(
+    update_data: UserUpdateRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Update current user's profile information
+
+    Allows users to update their name and email.
+    Firebase email should be updated separately through Firebase Auth.
+    """
+    try:
+        users_collection = get_collection("users")
+
+        # Build update document
+        update_fields = {"updated_at": datetime.utcnow()}
+
+        if update_data.name is not None:
+            update_fields["name"] = update_data.name.strip()
+
+        if update_data.email is not None:
+            # Check if email is already in use by another user
+            existing = await users_collection.find_one({
+                "email": update_data.email,
+                "uid": {"$ne": current_user["uid"]}
+            })
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email already in use"
+                )
+            update_fields["email"] = update_data.email
+
+        # Update user
+        result = await users_collection.update_one(
+            {"uid": current_user["uid"]},
+            {"$set": update_fields}
+        )
+
+        if result.modified_count == 0 and result.matched_count == 0:
+            logger.error(f"Failed to update user profile: uid={current_user['uid']}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Profile update failed"
+            )
+
+        # Get updated user
+        updated_user = await users_collection.find_one(
+            {"uid": current_user["uid"]},
+            sort=[("updated_at", -1), ("_id", -1)],
+        )
+
+        if not updated_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        logger.info(f"User profile updated: uid={current_user['uid']}, fields={list(update_fields.keys())}")
+        return UserResponse(**updated_user)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Profile update error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Profile update failed"
+        )
+
+
+@router.get("/users", response_model=UserListResponse)
+async def list_users(
+    role: Optional[str] = Query(None, regex="^(teacher|student)$"),
+    search: Optional[str] = Query(None, min_length=1, max_length=100),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    current_teacher: dict = Depends(get_current_teacher)
+):
+    """
+    List users (teachers only)
+
+    Teachers can view all users to manage enrollments and assignments.
+    Supports filtering by role and searching by name/email.
+    """
+    try:
+        users_collection = get_collection("users")
+
+        # Build query
+        query = {}
+        if role:
+            query["role"] = role
+
+        if search:
+            # Case-insensitive search in name and email
+            query["$or"] = [
+                {"name": {"$regex": search, "$options": "i"}},
+                {"email": {"$regex": search, "$options": "i"}}
+            ]
+
+        # Get total count
+        total = await users_collection.count_documents(query)
+
+        # Get paginated users
+        skip = (page - 1) * page_size
+        users_cursor = users_collection.find(query).sort("created_at", -1).skip(skip).limit(page_size)
+        users = await users_cursor.to_list(length=page_size)
+
+        user_responses = [UserResponse(**user) for user in users]
+
+        logger.info(f"Users listed by teacher: uid={current_teacher['uid']}, role_filter={role}, search={search}, page={page}")
+
+        return UserListResponse(
+            users=user_responses,
+            total=total,
+            page=page,
+            page_size=page_size
+        )
+
+    except Exception as e:
+        logger.error(f"List users error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list users"
+        )
+
+
+@router.get("/users/{uid}", response_model=UserResponse)
+async def get_user_by_uid(
+    uid: str,
+    current_teacher: dict = Depends(get_current_teacher)
+):
+    """
+    Get user by UID (teachers only)
+
+    Allows teachers to view any user's profile for administrative purposes.
+    """
+    try:
+        users_collection = get_collection("users")
+        user = await users_collection.find_one(
+            {"uid": uid},
+            sort=[("updated_at", -1), ("_id", -1)],
+        )
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        return UserResponse(**user)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get user by UID error: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get user"
+        )
 
 
 @router.get("/health")

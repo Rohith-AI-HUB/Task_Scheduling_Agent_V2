@@ -107,7 +107,11 @@ async def get_optional_user(
     try:
         token_data = await verify_firebase_token(credentials.credentials)
         users_collection = get_collection("users")
-        user = await users_collection.find_one({"uid": token_data["uid"]})
+        user = await users_collection.find_one(
+            {"uid": token_data["uid"]},
+            sort=[("updated_at", -1), ("_id", -1)],
+        )
         return user
-    except:
+    except Exception:
+        # Silently fail for optional authentication
         return None

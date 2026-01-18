@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import EvaluationResults from '../components/EvaluationResults';
 
 const TaskView = () => {
   const { id } = useParams();
@@ -280,6 +281,39 @@ const TaskView = () => {
       setBatchEvaluationLoading(false);
     }
   };
+
+  // Poll for evaluation progress on running evaluations
+  useEffect(() => {
+    if (userRole !== 'teacher') return;
+
+    const runningEvaluations = submissions.filter(
+      (s) => s?.evaluation?.status === 'pending' || s?.evaluation?.status === 'running'
+    );
+
+    if (runningEvaluations.length === 0) return;
+
+    const pollInterval = setInterval(async () => {
+      let updated = false;
+      for (const sub of runningEvaluations) {
+        try {
+          const response = await api.get(`/submissions/${sub.id}/evaluation/progress`);
+          const { status, progress } = response.data || {};
+
+          if (status === 'completed' || status === 'failed') {
+            updated = true;
+          }
+        } catch (err) {
+          console.error('Failed to poll evaluation progress:', err);
+        }
+      }
+
+      if (updated) {
+        await loadSubmissions();
+      }
+    }, 3000); // Poll every 3 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [submissions, userRole]);
 
   useEffect(() => {
     loadSubmissions();
@@ -646,6 +680,84 @@ const TaskView = () => {
                     </div>
                   </div>
 
+                  {/* Evaluation Analytics Dashboard */}
+                  {evaluationSummary && submissions.length > 0 && (
+                    <div className="mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {/* Total Submissions */}
+                      <div className="bg-white dark:bg-[#1c162e] rounded-xl border border-[#eae6f4] dark:border-[#2a2438] p-4">
+                        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-2">
+                          <span className="material-symbols-outlined text-lg">assignment</span>
+                          <p className="text-xs font-bold uppercase tracking-wider">Total Submissions</p>
+                        </div>
+                        <p className="text-3xl font-bold text-[#110d1c] dark:text-white">
+                          {evaluationSummary.total_submissions || 0}
+                        </p>
+                      </div>
+
+                      {/* Average AI Score */}
+                      {evaluationSummary.average_ai_score !== null && evaluationSummary.average_ai_score !== undefined && (
+                        <div className="bg-white dark:bg-[#1c162e] rounded-xl border border-[#eae6f4] dark:border-[#2a2438] p-4">
+                          <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-2">
+                            <span className="material-symbols-outlined text-lg">smart_toy</span>
+                            <p className="text-xs font-bold uppercase tracking-wider">Avg AI Score</p>
+                          </div>
+                          <div className="flex items-baseline gap-2">
+                            <p className="text-3xl font-bold text-primary">
+                              {Number(evaluationSummary.average_ai_score).toFixed(1)}
+                            </p>
+                            <span className="text-sm text-gray-500 dark:text-gray-400">/100</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Evaluation Status Breakdown */}
+                      {evaluationSummary.status_counts && Object.keys(evaluationSummary.status_counts).length > 0 && (
+                        <div className="bg-white dark:bg-[#1c162e] rounded-xl border border-[#eae6f4] dark:border-[#2a2438] p-4">
+                          <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-2">
+                            <span className="material-symbols-outlined text-lg">assessment</span>
+                            <p className="text-xs font-bold uppercase tracking-wider">Evaluation Status</p>
+                          </div>
+                          <div className="space-y-1">
+                            {Object.entries(evaluationSummary.status_counts).map(([status, count]) => (
+                              <div key={status} className="flex items-center justify-between text-sm">
+                                <span className="capitalize text-gray-600 dark:text-gray-400">{status}:</span>
+                                <span className="font-bold text-[#110d1c] dark:text-white">{count}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Quick Stats */}
+                      <div className="bg-white dark:bg-[#1c162e] rounded-xl border border-[#eae6f4] dark:border-[#2a2438] p-4">
+                        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-2">
+                          <span className="material-symbols-outlined text-lg">trending_up</span>
+                          <p className="text-xs font-bold uppercase tracking-wider">Quick Stats</p>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-600 dark:text-gray-400">Graded:</span>
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                              {submissions.filter((s) => s.score !== null && s.score !== undefined).length}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-600 dark:text-gray-400">Ungraded:</span>
+                            <span className="font-bold text-amber-600 dark:text-amber-400">
+                              {submissions.filter((s) => s.score === null || s.score === undefined).length}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-600 dark:text-gray-400">With Feedback:</span>
+                            <span className="font-bold text-blue-600 dark:text-blue-400">
+                              {submissions.filter((s) => s.feedback && s.feedback.trim()).length}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {submissionLoading ? (
                     <div className="text-[#5d479e] dark:text-[#a094c7]">Loading submissions...</div>
                   ) : submissions.length === 0 ? (
@@ -745,7 +857,7 @@ const TaskView = () => {
                               ) : null}
 
                               <div className="mb-6">
-                                <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center justify-between mb-3">
                                   <h5 className="text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase tracking-widest">
                                     Evaluation
                                   </h5>
@@ -758,49 +870,7 @@ const TaskView = () => {
                                     {evaluationLoading[s.id] ? 'Starting...' : 'Evaluate'}
                                   </button>
                                 </div>
-                                <div className="bg-[#f9f8fc] dark:bg-[#140f23] p-4 rounded-lg text-sm border border-[#eae6f4] dark:border-[#2a2438] space-y-2">
-                                  <div className="flex flex-wrap gap-4">
-                                    <div className="font-semibold">
-                                      Status:{' '}
-                                      <span className="font-bold">
-                                        {s?.evaluation?.status ? String(s.evaluation.status) : 'not started'}
-                                      </span>
-                                    </div>
-                                    {s?.evaluation?.ai_score !== null && s?.evaluation?.ai_score !== undefined ? (
-                                      <div className="font-semibold">
-                                        AI Score:{' '}
-                                        <span className="font-bold">{String(s.evaluation.ai_score)}</span>
-                                      </div>
-                                    ) : null}
-                                    {s?.evaluation?.code_results ? (
-                                      <div className="font-semibold">
-                                        Tests:{' '}
-                                        <span className="font-bold">
-                                          {Number(s.evaluation.code_results.passed || 0)} passed,{' '}
-                                          {Number(s.evaluation.code_results.failed || 0)} failed
-                                        </span>
-                                      </div>
-                                    ) : null}
-                                    {s?.evaluation?.document_metrics ? (
-                                      <div className="font-semibold">
-                                        Words:{' '}
-                                        <span className="font-bold">
-                                          {Number(s.evaluation.document_metrics.word_count || 0)}
-                                        </span>
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                  {s?.evaluation?.ai_feedback ? (
-                                    <div className="whitespace-pre-wrap text-[#110d1c] dark:text-white/90">
-                                      {String(s.evaluation.ai_feedback)}
-                                    </div>
-                                  ) : null}
-                                  {s?.evaluation?.last_error ? (
-                                    <div className="whitespace-pre-wrap text-rose-700 dark:text-rose-300 font-semibold">
-                                      {String(s.evaluation.last_error)}
-                                    </div>
-                                  ) : null}
-                                </div>
+                                <EvaluationResults evaluation={s?.evaluation} taskPoints={task?.points} />
                               </div>
 
                               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">

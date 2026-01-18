@@ -1,10 +1,12 @@
 from datetime import datetime
 import secrets
 import string
+import logging
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pymongo.errors import DuplicateKeyError
+from typing import Optional
 
 from app.database.collections import get_collection
 from app.models.subject import (
@@ -17,6 +19,7 @@ from app.models.roster import StudentRosterItem
 from app.utils.dependencies import get_current_student, get_current_teacher, get_current_user
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _serialize_subject(doc: dict) -> SubjectResponse:
@@ -52,40 +55,61 @@ async def create_subject(
     request: SubjectCreateRequest,
     current_teacher: dict = Depends(get_current_teacher),
 ):
-    subjects_collection = get_collection("subjects")
+    """
+    Create a new subject (teachers only)
 
-    join_code = _generate_join_code()
-    for _ in range(5):
-        existing = await subjects_collection.find_one({"join_code": join_code})
-        if not existing:
-            break
+    Generates a unique join code for student enrollment.
+    Subject name is required, code is optional.
+    """
+    try:
+        subjects_collection = get_collection("subjects")
+
+        # Generate unique join code
         join_code = _generate_join_code()
-    else:
+        for attempt in range(5):
+            existing = await subjects_collection.find_one({"join_code": join_code})
+            if not existing:
+                break
+            join_code = _generate_join_code()
+            logger.debug(f"Join code collision, retry {attempt + 1}/5")
+        else:
+            logger.error(f"Failed to generate unique join code after 5 attempts for teacher: {current_teacher['uid']}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate join code, please try again",
+            )
+
+        now = datetime.utcnow()
+        subject_doc = {
+            "name": request.name.strip(),
+            "code": request.code.strip() if request.code else None,
+            "teacher_uid": current_teacher["uid"],
+            "join_code": join_code,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+        result = await subjects_collection.insert_one(subject_doc)
+        logger.info(f"Subject created: id={result.inserted_id}, name={request.name}, teacher={current_teacher['uid']}, join_code={join_code}")
+
+        created = await subjects_collection.find_one({"_id": result.inserted_id})
+        if not created:
+            logger.error(f"Failed to retrieve created subject: id={result.inserted_id}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Subject creation failed"
+            )
+
+        return _serialize_subject(created)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Subject creation error: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate join code",
+            detail="Failed to create subject"
         )
-
-    now = datetime.utcnow()
-    subject_doc = {
-        "name": request.name.strip(),
-        "code": request.code.strip() if request.code else None,
-        "teacher_uid": current_teacher["uid"],
-        "join_code": join_code,
-        "created_at": now,
-        "updated_at": now,
-    }
-
-    try:
-        result = await subjects_collection.insert_one(subject_doc)
-    except DuplicateKeyError:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Subject join code already exists, retry",
-        )
-
-    created = await subjects_collection.find_one({"_id": result.inserted_id})
-    return _serialize_subject(created)
 
 
 @router.get("", response_model=list[SubjectResponse])

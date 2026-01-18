@@ -7,15 +7,35 @@ from pydantic import BaseModel, Field
 EvaluationStatus = Literal["pending", "running", "completed", "failed"]
 
 
+class TestCaseResult(BaseModel):
+    """Detailed result for a single test case."""
+    case_number: int
+    description: str = ""
+    points: int = 1
+    status: Literal["passed", "failed", "timeout", "runtime_error", "error"] = "pending"
+    output: Optional[str] = None
+    expected: Optional[str] = None
+    actual: Optional[str] = None
+    error: Optional[str] = None
+    stderr: Optional[str] = None
+
+
 class CodeEvaluationResults(BaseModel):
     passed: int = 0
     failed: int = 0
+    total_points: int = 0
+    earned_points: int = 0
     errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    test_results: list[TestCaseResult] = Field(default_factory=list)
 
 
 class DocumentMetrics(BaseModel):
     word_count: int = 0
     keywords_found: list[str] = Field(default_factory=list)
+    readability_score: Optional[float] = None
+    plagiarism_detected: bool = False
+    structure_quality: Optional[float] = None
 
 
 class SubmissionEvaluation(BaseModel):
