@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Student Subject Details View</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#3c06e0",
+              "background-light": "#f6f5f8",
+              "background-dark": "#140f23",
+            },
+            fontFamily: {
+              "display": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .task-card-hover:hover {
+            border-color: #3c06e0;
+            background-color: rgba(60, 6, 224, 0.02);
+            transform: translateY(-2px);
+            transition: all 0.2s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark min-h-screen font-display">
+<!-- Top Navigation Bar -->
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-800 bg-white dark:bg-background-dark px-10 py-3 sticky top-0 z-50">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-4 text-slate-900 dark:text-white">
+<div class="size-8 bg-primary rounded-lg flex items-center justify-center text-white">
+<span class="material-symbols-outlined">event_upcoming</span>
+</div>
+<h2 class="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-[-0.015em]">Task Scheduling Agent</h2>
+</div>
+<nav class="flex items-center gap-9">
+<a class="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">Dashboard</a>
+<a class="text-primary text-sm font-bold leading-normal" href="#">My Subjects</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">Calendar</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">Reports</a>
+</nav>
+</div>
+<div class="flex flex-1 justify-end gap-6">
+<label class="flex flex-col min-w-40 h-10 max-w-64">
+<div class="flex w-full flex-1 items-stretch rounded-lg h-full overflow-hidden border border-slate-200 dark:border-slate-700">
+<div class="text-slate-400 flex bg-slate-50 dark:bg-slate-800 items-center justify-center pl-4">
+<span class="material-symbols-outlined text-xl">search</span>
+</div>
+<input class="form-input flex w-full min-w-0 flex-1 border-none bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-0 placeholder:text-slate-400 px-4 text-sm font-normal" placeholder="Search tasks..." value=""/>
+</div>
+</label>
+<div class="flex gap-2">
+<button class="flex items-center justify-center rounded-lg size-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="flex items-center justify-center rounded-lg size-10 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 ring-2 ring-slate-100 dark:ring-slate-800" data-alt="User profile avatar with friendly appearance" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDQ9dCTMuvHG3cY80PKGtFrYuAnjYace-1Ogm4gM8Vd9K40GqbSFnLkDyD_tuEsTzKMjrR9qDU31MqgBv3sZO5HiWCxnOAY3EGSbGrjLCAIeD37XT1JqPvJoVpyHTTlcR9dc4YFvubKTYJhTfUs1vDIWWeE_Npb6gGW2GzeCZShJBTZ7PwroHWgwEayO3G-xKyx60-xKYlbutdO5t1jlCZ_jKSNjyAiNHja1XgHclTiX3Jd7FumPNBfW21ZhtIMOV5ehsYR8dz3OPmO");'></div>
+</div>
+</header>
+<main class="max-w-[1200px] mx-auto px-6 py-8">
+<!-- Breadcrumbs -->
+<nav class="flex items-center gap-2 mb-6">
+<a class="text-slate-500 hover:text-primary text-sm font-medium transition-colors" href="#">My Subjects</a>
+<span class="text-slate-400 material-symbols-outlined text-sm">chevron_right</span>
+<span class="text-slate-900 dark:text-white text-sm font-semibold">Advanced Mathematics</span>
+</nav>
+<!-- Profile/Subject Header -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 mb-8 shadow-sm">
+<div class="flex flex-col md:flex-row md:items-center gap-6">
+<div class="bg-primary/10 rounded-xl size-32 flex items-center justify-center overflow-hidden">
+<div class="bg-center bg-no-repeat bg-cover size-full" data-alt="Mathematical geometry patterns and calculations" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDOu7kNgOaVdrFEce7O77M9xnvCgf3eRw62Wh0ZRejh37AJGq9nVxAMC6f1HAWKjK-Wj42LB39AyByZKXuI7YiPUPc6t01Rjh-B6B6yCwFD7NWJ7r8uuQcuLdsNbjA5CC9R10rfiO0ChB2bkim5kpDFPAHA9iUbhG3I3Bk-aT3t9mohbXgbLAgvicuHgU_8jqPydyMdlLlYxQRNNhqcltwjPm09C669vAMeMTFmCG_GmO5P0Xqwr-3s6kodVVSuAkvFXW7uWGI59x1D");'></div>
+</div>
+<div class="flex-1">
+<div class="flex flex-wrap items-center gap-3 mb-1">
+<h1 class="text-slate-900 dark:text-white text-3xl font-extrabold tracking-tight">Advanced Mathematics</h1>
+<span class="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs font-bold px-2 py-1 rounded-full uppercase tracking-wider">Active Subject</span>
+</div>
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+<span class="material-symbols-outlined text-lg">person</span>
+<span class="text-base font-medium leading-normal">Dr. Sarah Jenkins</span>
+</div>
+<div class="flex items-center gap-2 text-slate-500 dark:text-slate-500">
+<span class="material-symbols-outlined text-lg">fingerprint</span>
+<span class="text-sm font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">Join Code: MATH-2024</span>
+</div>
+</div>
+</div>
+<div class="flex gap-3">
+<button class="px-5 py-2.5 bg-primary text-white font-bold rounded-lg shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all flex items-center gap-2">
+<span class="material-symbols-outlined">forum</span>
+                        Contact Teacher
+                    </button>
+</div>
+</div>
+</div>
+<!-- Task Filtering Tabs -->
+<div class="border-b border-slate-200 dark:border-slate-800 mb-8 overflow-x-auto">
+<div class="flex gap-8 min-w-max">
+<a class="flex flex-col items-center justify-center border-b-2 border-primary text-primary pb-3 transition-all" href="#">
+<p class="text-sm font-bold leading-normal tracking-wide">All Tasks</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-500 dark:text-slate-400 pb-3 hover:text-primary transition-all" href="#">
+<p class="text-sm font-bold leading-normal tracking-wide">Pending</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-500 dark:text-slate-400 pb-3 hover:text-primary transition-all" href="#">
+<p class="text-sm font-bold leading-normal tracking-wide">Completed</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-500 dark:text-slate-400 pb-3 hover:text-primary transition-all" href="#">
+<p class="text-sm font-bold leading-normal tracking-wide">Resources</p>
+</a>
+</div>
+</div>
+<!-- Section Header -->
+<div class="flex items-center justify-between mb-6">
+<h2 class="text-slate-900 dark:text-white text-xl font-bold">Upcoming Tasks</h2>
+<div class="flex items-center gap-2 text-slate-500 text-sm font-medium cursor-pointer hover:text-primary">
+<span>View Full Calendar</span>
+<span class="material-symbols-outlined text-lg">calendar_month</span>
+</div>
+</div>
+<!-- Task Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<!-- Task Card 1: Completed -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm transition-all task-card-hover group">
+<div class="flex justify-between items-start mb-4">
+<div class="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">check_circle</span>
+                        Completed
+                    </div>
+<span class="text-slate-400 material-symbols-outlined group-hover:text-primary transition-colors cursor-pointer">more_horiz</span>
+</div>
+<h3 class="text-slate-900 dark:text-white font-bold text-lg mb-2 leading-tight">Calculus Problem Set A</h3>
+<p class="text-slate-500 dark:text-slate-400 text-sm mb-6 line-clamp-2">Complete problems 1-15 on differential equations from Chapter 4 of the textbook.</p>
+<div class="flex flex-col gap-3">
+<div class="flex items-center gap-2 text-slate-400">
+<span class="material-symbols-outlined text-sm">event</span>
+<span class="text-xs font-medium">Due Oct 20, 11:59 PM</span>
+</div>
+<div class="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
+<span class="text-primary text-xs font-bold">Grade: 95/100</span>
+<button class="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1">
+                            Review Submission <span class="material-symbols-outlined text-sm">open_in_new</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Task Card 2: In Progress -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm transition-all task-card-hover group">
+<div class="flex justify-between items-start mb-4">
+<div class="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">pending</span>
+                        In Progress
+                    </div>
+<span class="text-slate-400 material-symbols-outlined group-hover:text-primary transition-colors cursor-pointer">more_horiz</span>
+</div>
+<h3 class="text-slate-900 dark:text-white font-bold text-lg mb-2 leading-tight">Linear Algebra Quiz</h3>
+<p class="text-slate-500 dark:text-slate-400 text-sm mb-6 line-clamp-2">Weekly conceptual quiz covering vector spaces and linear transformations.</p>
+<div class="flex flex-col gap-3">
+<div class="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined text-sm">event</span>
+<span class="text-xs font-bold">Due Oct 22, 11:59 PM</span>
+</div>
+<div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 mt-2">
+<div class="bg-amber-500 h-1.5 rounded-full" style="width: 45%"></div>
+</div>
+<div class="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+<button class="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors">
+                            Continue Quiz
+                        </button>
+</div>
+</div>
+</div>
+<!-- Task Card 3: Not Started -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm transition-all task-card-hover group">
+<div class="flex justify-between items-start mb-4">
+<div class="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">schedule</span>
+                        Not Started
+                    </div>
+<span class="text-slate-400 material-symbols-outlined group-hover:text-primary transition-colors cursor-pointer">more_horiz</span>
+</div>
+<h3 class="text-slate-900 dark:text-white font-bold text-lg mb-2 leading-tight">Fourier Series Project</h3>
+<p class="text-slate-500 dark:text-slate-400 text-sm mb-6 line-clamp-2">Practical application project using Fourier transforms for signal processing simulation.</p>
+<div class="flex flex-col gap-3">
+<div class="flex items-center gap-2 text-red-600 font-bold">
+<span class="material-symbols-outlined text-sm">event</span>
+<span class="text-xs">Due Oct 28, 11:59 PM</span>
+</div>
+<div class="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+<button class="bg-primary text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-primary/90 transition-all">
+                            View Details
+                        </button>
+</div>
+</div>
+</div>
+<!-- Task Card 4: Reading -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm transition-all task-card-hover group">
+<div class="flex justify-between items-start mb-4">
+<div class="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">menu_book</span>
+                        Reading
+                    </div>
+<span class="text-slate-400 material-symbols-outlined group-hover:text-primary transition-colors cursor-pointer">more_horiz</span>
+</div>
+<h3 class="text-slate-900 dark:text-white font-bold text-lg mb-2 leading-tight">Complex Analysis Pre-reading</h3>
+<p class="text-slate-500 dark:text-slate-400 text-sm mb-6 line-clamp-2">Read sections 5.1 to 5.4 from the supplementary course reader before Friday's lecture.</p>
+<div class="flex flex-col gap-3">
+<div class="flex items-center gap-2 text-slate-400">
+<span class="material-symbols-outlined text-sm">event</span>
+<span class="text-xs font-medium">Due Nov 02, 09:00 AM</span>
+</div>
+<div class="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+<button class="border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-50 transition-colors">
+                            Mark as Read
+                        </button>
+</div>
+</div>
+</div>
+<!-- Task Card 5: Missing (Red) -->
+<div class="bg-white dark:bg-slate-900 border border-red-100 dark:border-red-900/30 rounded-xl p-5 shadow-sm transition-all task-card-hover group">
+<div class="flex justify-between items-start mb-4">
+<div class="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">error</span>
+                        Missing
+                    </div>
+<span class="text-slate-400 material-symbols-outlined group-hover:text-primary transition-colors cursor-pointer">more_horiz</span>
+</div>
+<h3 class="text-slate-900 dark:text-white font-bold text-lg mb-2 leading-tight">Module 2 Synthesis Paper</h3>
+<p class="text-slate-500 dark:text-slate-400 text-sm mb-6 line-clamp-2">Late submission portal open for partial credit. 10% deduction per day.</p>
+<div class="flex flex-col gap-3">
+<div class="flex items-center gap-2 text-red-600 font-bold">
+<span class="material-symbols-outlined text-sm">event</span>
+<span class="text-xs font-bold">Overdue: Oct 15</span>
+</div>
+<div class="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+<button class="bg-red-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-red-700 transition-all">
+                            Submit Late
+                        </button>
+</div>
+</div>
+</div>
+<!-- Add Task Placeholder (Visual balance) -->
+<div class="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl p-5 flex flex-col items-center justify-center text-center opacity-60 hover:opacity-100 transition-opacity cursor-pointer">
+<span class="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-700 mb-2">add_task</span>
+<p class="text-slate-400 text-sm font-medium">Add to My Study List</p>
+</div>
+</div>
+</main>
+<!-- Footer for quick context -->
+<footer class="mt-20 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 py-12">
+<div class="max-w-[1200px] mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-8">
+<div class="col-span-1 md:col-span-2">
+<div class="flex items-center gap-3 mb-4">
+<div class="size-6 bg-primary rounded flex items-center justify-center text-white">
+<span class="material-symbols-outlined text-xs">event_upcoming</span>
+</div>
+<span class="font-bold text-slate-900 dark:text-white">Task Scheduling Agent</span>
+</div>
+<p class="text-slate-500 text-sm max-w-sm">Empowering students to manage their academic life with intelligent scheduling and task tracking.</p>
+</div>
+<div>
+<h4 class="text-slate-900 dark:text-white font-bold text-sm mb-4">Subject Support</h4>
+<ul class="space-y-2 text-sm text-slate-500">
+<li><a class="hover:text-primary transition-colors" href="#">Course Materials</a></li>
+<li><a class="hover:text-primary transition-colors" href="#">Faculty Office Hours</a></li>
+<li><a class="hover:text-primary transition-colors" href="#">Study Groups</a></li>
+</ul>
+</div>
+<div>
+<h4 class="text-slate-900 dark:text-white font-bold text-sm mb-4">Platform</h4>
+<ul class="space-y-2 text-sm text-slate-500">
+<li><a class="hover:text-primary transition-colors" href="#">Help Center</a></li>
+<li><a class="hover:text-primary transition-colors" href="#">Accessibility</a></li>
+<li><a class="hover:text-primary transition-colors" href="#">Privacy Policy</a></li>
+</ul>
+</div>
+</div>
+<div class="max-w-[1200px] mx-auto px-6 pt-12 text-center text-slate-400 text-xs">
+            © 2024 Task Scheduling Agent. All rights reserved. Professional Student Edition.
+        </div>
+</footer>
+</body></html>

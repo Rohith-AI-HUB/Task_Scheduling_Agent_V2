@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Teacher Dashboard - Task Scheduling Agent</title>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#3c06e0",
+                        "background-light": "#f6f5f8",
+                        "background-dark": "#140f23",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-[#110d1c] dark:text-white antialiased min-h-screen">
+<div class="flex flex-col min-h-screen">
+<!-- TopNavBar Component -->
+<header class="sticky top-0 z-50 w-full border-b border-[#eae6f4] dark:border-white/10 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md px-6 md:px-10 py-3 flex items-center justify-between">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-3">
+<div class="text-primary size-8">
+<svg fill="none" viewbox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+<path d="M8.57829 8.57829C5.52816 11.6284 3.451 15.5145 2.60947 19.7452C1.76794 23.9758 2.19984 28.361 3.85056 32.3462C5.50128 36.3314 8.29667 39.7376 11.8832 42.134C15.4698 44.5305 19.6865 45.8096 24 45.8096C28.3135 45.8096 32.5302 44.5305 36.1168 42.134C39.7033 39.7375 42.4987 36.3314 44.1494 32.3462C45.8002 28.361 46.2321 23.9758 45.3905 19.7452C44.549 15.5145 42.4718 11.6284 39.4217 8.57829L24 24L8.57829 8.57829Z" fill="currentColor"></path>
+</svg>
+</div>
+<h2 class="text-xl font-bold tracking-tight hidden md:block">Task Scheduling Agent</h2>
+</div>
+<!-- Search Bar Integrated in Header -->
+<div class="hidden lg:flex w-64 h-10">
+<div class="flex w-full items-stretch rounded-lg bg-[#eae6f4] dark:bg-white/5 border-none">
+<div class="flex items-center justify-center pl-4 text-[#5d479e] dark:text-gray-400">
+<span class="material-symbols-outlined text-xl">search</span>
+</div>
+<input class="w-full bg-transparent border-none focus:ring-0 text-sm placeholder:text-[#5d479e] dark:placeholder:text-gray-500 pl-2" placeholder="Search resources..." type="text"/>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-sm font-semibold text-primary" href="#">Dashboard</a>
+<a class="text-sm font-medium hover:text-primary transition-colors" href="#">Calendar</a>
+<a class="text-sm font-medium hover:text-primary transition-colors" href="#">Reports</a>
+</nav>
+<div class="h-8 w-px bg-gray-200 dark:bg-white/10 hidden md:block"></div>
+<button class="bg-primary text-white text-sm font-bold px-4 py-2 rounded-lg hover:opacity-90 transition-opacity flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">logout</span>
+<span class="hidden sm:inline">Logout</span>
+</button>
+<div class="h-10 w-10 rounded-full border-2 border-primary/20 bg-center bg-cover" data-alt="Teacher profile picture" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuA_NDm4M0DizhRZ3pjwTxVgkz-Q0liZ6MWlpx2gJ3N3iWqqAGzb2tqJiXHV4DKH8mgbmBVTCC02TEpDtjs9F5scSJ8L_iYPM1V6cCN7v_2ApRvX52kiwTvmpjQ9lF8UrS0PT3CjoW3U5bAFLAhap1nMTL6z9j8GUc5wFEcheoT9fiOaDDxmdsOqiOIMkuggwCKXiO-WpNtIM_h2l8yGRZNRKNgKJ9xvrxiXa-fSILq81wCsll9KSsRWuTXLA1FQWhz-inT3rsvhSJDb");'></div>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<!-- SideNavBar Component -->
+<aside class="hidden lg:flex flex-col w-64 border-r border-[#eae6f4] dark:border-white/10 p-6 gap-8 bg-white dark:bg-background-dark/50">
+<div class="flex flex-col">
+<p class="text-xs font-bold uppercase tracking-wider text-[#5d479e] dark:text-gray-400 mb-4">Management</p>
+<nav class="flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/10 text-primary font-semibold" href="#">
+<span class="material-symbols-outlined">home</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-[#eae6f4] dark:hover:bg-white/5 transition-colors" href="#">
+<span class="material-symbols-outlined">school</span>
+<span>My Classes</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-[#eae6f4] dark:hover:bg-white/5 transition-colors" href="#">
+<span class="material-symbols-outlined">assignment</span>
+<span>Assignments</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-[#eae6f4] dark:hover:bg-white/5 transition-colors" href="#">
+<span class="material-symbols-outlined">trending_up</span>
+<span>Student Progress</span>
+</a>
+</nav>
+</div>
+<div class="flex flex-col mt-auto">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-[#eae6f4] dark:hover:bg-white/5 transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>Settings</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-[#eae6f4] dark:hover:bg-white/5 transition-colors" href="#">
+<span class="material-symbols-outlined">help</span>
+<span>Support</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 overflow-y-auto px-6 md:px-10 py-8">
+<!-- PageHeading Component -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+<div>
+<h1 class="text-3xl font-black tracking-tight mb-2">Teacher Dashboard</h1>
+<p class="text-[#5d479e] dark:text-gray-400">Welcome back, Professor! Here's an overview of your classrooms.</p>
+</div>
+<button class="bg-primary text-white font-bold px-6 py-3 rounded-xl hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center gap-2">
+<span class="material-symbols-outlined">add_circle</span>
+                        Create Classroom
+                    </button>
+</div>
+<!-- Stats Overview Component -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+<div class="bg-white dark:bg-white/5 p-6 rounded-xl border border-[#d5cee9] dark:border-white/10 flex flex-col gap-1 shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<p class="text-sm font-semibold text-[#5d479e] dark:text-gray-400 uppercase tracking-wide">Active Subjects</p>
+<span class="material-symbols-outlined text-primary">book</span>
+</div>
+<p class="text-3xl font-black tracking-tight">12</p>
+<p class="text-xs text-green-600 font-medium flex items-center gap-1 mt-1">
+<span class="material-symbols-outlined text-xs">trending_up</span> +2 from last month
+                        </p>
+</div>
+<div class="bg-white dark:bg-white/5 p-6 rounded-xl border border-[#d5cee9] dark:border-white/10 flex flex-col gap-1 shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<p class="text-sm font-semibold text-[#5d479e] dark:text-gray-400 uppercase tracking-wide">Enrolled Students</p>
+<span class="material-symbols-outlined text-primary">group</span>
+</div>
+<p class="text-3xl font-black tracking-tight">450</p>
+<p class="text-xs text-green-600 font-medium flex items-center gap-1 mt-1">
+<span class="material-symbols-outlined text-xs">trending_up</span> +15 new registrations
+                        </p>
+</div>
+<div class="bg-white dark:bg-white/5 p-6 rounded-xl border border-[#d5cee9] dark:border-white/10 flex flex-col gap-1 shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<p class="text-sm font-semibold text-[#5d479e] dark:text-gray-400 uppercase tracking-wide">Pending Tasks</p>
+<span class="material-symbols-outlined text-primary">pending_actions</span>
+</div>
+<p class="text-3xl font-black tracking-tight">28</p>
+<p class="text-xs text-amber-600 font-medium flex items-center gap-1 mt-1">
+<span class="material-symbols-outlined text-xs">priority_high</span> 4 due today
+                        </p>
+</div>
+</div>
+<!-- Search & Filters -->
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-lg font-bold">Your Classrooms</h3>
+<div class="flex gap-2">
+<button class="p-2 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-gray-100 dark:hover:bg-white/5">
+<span class="material-symbols-outlined">filter_list</span>
+</button>
+<button class="p-2 rounded-lg border border-gray-200 dark:border-white/10 hover:bg-gray-100 dark:hover:bg-white/5">
+<span class="material-symbols-outlined">grid_view</span>
+</button>
+</div>
+</div>
+<!-- Subject Grid (Custom Component) -->
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+<!-- Subject Card 1 -->
+<div class="group bg-white dark:bg-white/5 rounded-xl border border-[#d5cee9] dark:border-white/10 overflow-hidden hover:shadow-xl hover:shadow-primary/10 transition-all">
+<div class="h-24 bg-gradient-to-r from-primary to-indigo-800 p-6 flex flex-col justify-end">
+<div class="flex justify-between items-start">
+<span class="bg-white/20 backdrop-blur-md text-white text-[10px] font-bold uppercase px-2 py-0.5 rounded tracking-widest">MATH-101</span>
+<button class="text-white opacity-60 hover:opacity-100"><span class="material-symbols-outlined">more_vert</span></button>
+</div>
+<h4 class="text-white font-black text-xl leading-tight">Advanced Mathematics</h4>
+</div>
+<div class="p-6 space-y-5">
+<div class="flex flex-col gap-1">
+<span class="text-xs font-bold text-[#5d479e] dark:text-gray-400 uppercase">Class Join Code</span>
+<div class="flex items-center justify-between bg-primary/5 dark:bg-white/5 p-3 rounded-lg border border-dashed border-primary/30">
+<span class="font-mono text-lg font-bold text-primary tracking-widest">X7J2K9</span>
+<button class="text-primary hover:scale-110 transition-transform flex items-center gap-1 text-xs font-bold">
+<span class="material-symbols-outlined text-base">content_copy</span>
+                                        COPY
+                                    </button>
+</div>
+</div>
+<div class="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">group</span> 32 Students</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">assignment</span> 8 Tasks</span>
+</div>
+<div class="pt-4 border-t border-[#eae6f4] dark:border-white/10 flex gap-2">
+<button class="flex-1 bg-[#eae6f4] dark:bg-white/10 text-primary dark:text-white font-bold py-2 rounded-lg text-sm hover:bg-primary hover:text-white transition-all">View</button>
+<button class="p-2 border border-[#eae6f4] dark:border-white/10 text-gray-500 rounded-lg hover:text-blue-600 hover:border-blue-600 transition-all"><span class="material-symbols-outlined text-xl">edit</span></button>
+<button class="p-2 border border-[#eae6f4] dark:border-white/10 text-gray-500 rounded-lg hover:text-red-600 hover:border-red-600 transition-all"><span class="material-symbols-outlined text-xl">delete</span></button>
+</div>
+</div>
+</div>
+<!-- Subject Card 2 -->
+<div class="group bg-white dark:bg-white/5 rounded-xl border border-[#d5cee9] dark:border-white/10 overflow-hidden hover:shadow-xl hover:shadow-primary/10 transition-all">
+<div class="h-24 bg-gradient-to-r from-blue-600 to-cyan-600 p-6 flex flex-col justify-end">
+<div class="flex justify-between items-start">
+<span class="bg-white/20 backdrop-blur-md text-white text-[10px] font-bold uppercase px-2 py-0.5 rounded tracking-widest">PHYS-204</span>
+<button class="text-white opacity-60 hover:opacity-100"><span class="material-symbols-outlined">more_vert</span></button>
+</div>
+<h4 class="text-white font-black text-xl leading-tight">Quantum Physics II</h4>
+</div>
+<div class="p-6 space-y-5">
+<div class="flex flex-col gap-1">
+<span class="text-xs font-bold text-[#5d479e] dark:text-gray-400 uppercase">Class Join Code</span>
+<div class="flex items-center justify-between bg-primary/5 dark:bg-white/5 p-3 rounded-lg border border-dashed border-primary/30">
+<span class="font-mono text-lg font-bold text-primary tracking-widest">Q4P9B2</span>
+<button class="text-primary hover:scale-110 transition-transform flex items-center gap-1 text-xs font-bold">
+<span class="material-symbols-outlined text-base">content_copy</span>
+                                        COPY
+                                    </button>
+</div>
+</div>
+<div class="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">group</span> 28 Students</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">assignment</span> 5 Tasks</span>
+</div>
+<div class="pt-4 border-t border-[#eae6f4] dark:border-white/10 flex gap-2">
+<button class="flex-1 bg-[#eae6f4] dark:bg-white/10 text-primary dark:text-white font-bold py-2 rounded-lg text-sm hover:bg-primary hover:text-white transition-all">View</button>
+<button class="p-2 border border-[#eae6f4] dark:border-white/10 text-gray-500 rounded-lg hover:text-blue-600 hover:border-blue-600 transition-all"><span class="material-symbols-outlined text-xl">edit</span></button>
+<button class="p-2 border border-[#eae6f4] dark:border-white/10 text-gray-500 rounded-lg hover:text-red-600 hover:border-red-600 transition-all"><span class="material-symbols-outlined text-xl">delete</span></button>
+</div>
+</div>
+</div>
+<!-- Subject Card 3 -->
+<div class="group bg-white dark:bg-white/5 rounded-xl border border-[#d5cee9] dark:border-white/10 overflow-hidden hover:shadow-xl hover:shadow-primary/10 transition-all">
+<div class="h-24 bg-gradient-to-r from-indigo-600 to-purple-600 p-6 flex flex-col justify-end">
+<div class="flex justify-between items-start">
+<span class="bg-white/20 backdrop-blur-md text-white text-[10px] font-bold uppercase px-2 py-0.5 rounded tracking-widest">HIST-202</span>
+<button class="text-white opacity-60 hover:opacity-100"><span class="material-symbols-outlined">more_vert</span></button>
+</div>
+<h4 class="text-white font-black text-xl leading-tight">World History</h4>
+</div>
+<div class="p-6 space-y-5">
+<div class="flex flex-col gap-1">
+<span class="text-xs font-bold text-[#5d479e] dark:text-gray-400 uppercase">Class Join Code</span>
+<div class="flex items-center justify-between bg-primary/5 dark:bg-white/5 p-3 rounded-lg border border-dashed border-primary/30">
+<span class="font-mono text-lg font-bold text-primary tracking-widest">H1S9T4</span>
+<button class="text-primary hover:scale-110 transition-transform flex items-center gap-1 text-xs font-bold">
+<span class="material-symbols-outlined text-base">content_copy</span>
+                                        COPY
+                                    </button>
+</div>
+</div>
+<div class="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">group</span> 45 Students</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-sm">assignment</span> 12 Tasks</span>
+</div>
+<div class="pt-4 border-t border-[#eae6f4] dark:border-white/10 flex gap-2">
+<button class="flex-1 bg-[#eae6f4] dark:bg-white/10 text-primary dark:text-white font-bold py-2 rounded-lg text-sm hover:bg-primary hover:text-white transition-all">View</button>
+<button class="p-2 border border-[#eae6f4] dark:border-white/10 text-gray-500 rounded-lg hover:text-blue-600 hover:border-blue-600 transition-all"><span class="material-symbols-outlined text-xl">edit</span></button>
+<button class="p-2 border border-[#eae6f4] dark:border-white/10 text-gray-500 rounded-lg hover:text-red-600 hover:border-red-600 transition-all"><span class="material-symbols-outlined text-xl">delete</span></button>
+</div>
+</div>
+</div>
+</div>
+<!-- Pagination/Load More (Subtle footer for main area) -->
+<div class="mt-12 flex items-center justify-center">
+<button class="flex items-center gap-2 px-6 py-2 rounded-full border border-primary/30 text-primary font-bold hover:bg-primary hover:text-white transition-all">
+                        Show more classrooms
+                        <span class="material-symbols-outlined">expand_more</span>
+</button>
+</div>
+</main>
+</div>
+</div>
+</body></html>

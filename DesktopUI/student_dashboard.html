@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Student Dashboard - Task Scheduling Agent</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "primary": "#3c06e0",
+                "background-light": "#f6f5f8",
+                "background-dark": "#140f23",
+                "border-light": "#d5cee9",
+                "text-main": "#110d1c",
+                "text-muted": "#5d479e",
+              },
+              fontFamily: {
+                "display": ["Inter"]
+              },
+              borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+            },
+          },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark min-h-screen text-text-main font-display">
+<!-- Top Navigation Bar -->
+<header class="sticky top-0 z-50 w-full border-b border-border-light bg-background-light/80 backdrop-blur-md dark:border-white/10 dark:bg-background-dark/80">
+<div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
+<div class="flex items-center gap-3">
+<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-white">
+<span class="material-symbols-outlined">schedule</span>
+</div>
+<h1 class="text-xl font-bold tracking-tight dark:text-white">Task Scheduling Agent</h1>
+</div>
+<div class="flex items-center gap-4">
+<button class="relative flex h-10 w-10 items-center justify-center rounded-lg bg-white/50 border border-border-light text-text-main hover:bg-white dark:bg-white/5 dark:border-white/10 dark:text-white">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-red-500"></span>
+</button>
+<div class="flex items-center gap-3 pl-4 border-l border-border-light dark:border-white/10">
+<div class="text-right hidden sm:block">
+<p class="text-sm font-semibold dark:text-white">Alex Smith</p>
+<p class="text-xs text-text-muted">ID: 882910</p>
+</div>
+<div class="h-10 w-10 rounded-full bg-cover bg-center border-2 border-primary" data-alt="Student profile portrait showing Alex Smith smiling" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBYZ4Vd3T3Jo3ZAlcGIAE5H-IhXtDy_MRLik591o7IVx10RTlg7FBDdm7OKD3BbFtzW9STBuX9J6gPF_DHWHg1uNY2A7Zq9moN-DV7E2lw33KjIFUskhYubZ52VF8T9rFtP8lOcJv2NVYXHbvsk91kgYoruHgKfHah-eIhBO4QBsK-JZ0BrkqeD-1cKwJZHqiLZwoL8T9zP8Prm4SAGD8cIcQh273xhtQmRrHr-wMg9mc27dhMzuCpUydjAzz7Tnr7XKrd7xh6IUdFR")'></div>
+</div>
+</div>
+</div>
+</header>
+<main class="mx-auto max-w-7xl px-6 py-8">
+<!-- Breadcrumbs -->
+<nav class="mb-6 flex items-center gap-2 text-sm font-medium text-text-muted">
+<span class="hover:text-primary cursor-pointer transition-colors">Home</span>
+<span class="material-symbols-outlined text-xs">chevron_right</span>
+<span class="text-text-main dark:text-white">Student Dashboard</span>
+</nav>
+<div class="grid grid-cols-1 gap-8 lg:grid-cols-12">
+<!-- Left & Center Column: Main Actions & Classes -->
+<div class="lg:col-span-8 flex flex-col gap-8">
+<!-- Profile Header -->
+<div class="flex flex-col gap-2">
+<h2 class="text-3xl font-bold tracking-tight dark:text-white">Welcome back, Alex!</h2>
+<p class="text-text-muted text-lg leading-relaxed">You have 4 assignments due this week. Stay on track!</p>
+</div>
+<!-- Join Classroom Card -->
+<div class="rounded-xl border border-border-light bg-white p-6 shadow-sm dark:bg-white/5 dark:border-white/10">
+<div class="flex flex-col @[480px]:flex-row @[480px]:items-center justify-between gap-6">
+<div class="flex-1">
+<h3 class="text-lg font-bold text-text-main dark:text-white">Join Classroom</h3>
+<p class="text-text-muted">Enter your 6-digit classroom code to enroll in a new subject.</p>
+</div>
+<div class="flex flex-1 items-center gap-3 max-w-md">
+<div class="relative flex-1">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">key</span>
+<input class="h-12 w-full rounded-lg border border-border-light bg-background-light pl-10 pr-4 text-text-main focus:border-primary focus:ring-1 focus:ring-primary dark:bg-background-dark dark:border-white/10 dark:text-white placeholder:text-text-muted/50" placeholder="e.g. AB12XY" type="text"/>
+</div>
+<button class="h-12 rounded-lg bg-primary px-8 font-bold text-white transition-all hover:bg-primary/90 active:scale-95 shadow-lg shadow-primary/20">
+                                Join
+                            </button>
+</div>
+</div>
+</div>
+<!-- Enrolled Classrooms Grid -->
+<div class="flex flex-col gap-6">
+<div class="flex items-center justify-between">
+<h3 class="text-xl font-bold text-text-main dark:text-white flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">school</span>
+                            Enrolled Classrooms
+                        </h3>
+<button class="text-sm font-semibold text-primary hover:underline">View All Classes</button>
+</div>
+<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+<!-- Class Card 1 -->
+<div class="group relative flex flex-col rounded-xl border border-border-light bg-white p-5 transition-all hover:shadow-md dark:bg-white/5 dark:border-white/10">
+<div class="flex items-start justify-between mb-4">
+<div class="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">biotech</span>
+</div>
+<span class="rounded-full bg-green-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-green-700 dark:bg-green-500/20 dark:text-green-400">Active</span>
+</div>
+<h4 class="text-lg font-bold dark:text-white">Advanced Chemistry</h4>
+<p class="text-sm text-text-muted">Section: B-204</p>
+<div class="mt-4 flex items-center gap-2 py-3 border-t border-border-light/50 dark:border-white/5">
+<div class="h-6 w-6 rounded-full bg-cover" data-alt="Portrait of Dr. Elena Vance" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuA48GHA0y-4wYnT7I7arqxGZcVuDJ0wpxHsQk0GtkELTPnb716hk__qwxAi6iyFkpbpGUn6r24orAsVJFADIHI0rfAxlOTy6C87v1nzgrq2JCHQaNRWk1Gk5okWgWkMiP9VcmnTeYjRwqg6zBnyzNTm4VItSd07JV3XgzAD6SAx7cjEQMQCaWqAldEwudevz2cutIE0l1AHkIBniEH65UCXeE7Jn5oWyM4WttItn5Iiw1aC2P18mKmwgf8dzs97y64djH83_5NZ-Q2l")'></div>
+<p class="text-xs font-medium text-text-muted">Dr. Elena Vance</p>
+</div>
+<div class="mt-2 flex items-center justify-between">
+<span class="text-xs font-mono font-bold text-text-muted bg-background-light dark:bg-white/10 px-2 py-1 rounded">CODE: CHM-402</span>
+<button class="flex items-center gap-1 text-sm font-bold text-primary group-hover:translate-x-1 transition-transform">
+                                    Open <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Class Card 2 -->
+<div class="group relative flex flex-col rounded-xl border border-border-light bg-white p-5 transition-all hover:shadow-md dark:bg-white/5 dark:border-white/10">
+<div class="flex items-start justify-between mb-4">
+<div class="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">history_edu</span>
+</div>
+<span class="rounded-full bg-green-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-green-700 dark:bg-green-500/20 dark:text-green-400">Active</span>
+</div>
+<h4 class="text-lg font-bold dark:text-white">Modern World History</h4>
+<p class="text-sm text-text-muted">Section: H-101</p>
+<div class="mt-4 flex items-center gap-2 py-3 border-t border-border-light/50 dark:border-white/5">
+<div class="h-6 w-6 rounded-full bg-cover" data-alt="Portrait of Prof. Marcus Aurel" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAJ8-3sHJ0q45vRndvL0jzh2802_hPpp-LErFDJlCUXiBSwMTNwRW_Nv6UFSAs3T7SsE3tKE9hYnXXOpT5vmasWPGslz3lGQ_Sq8CaAhMU986FG4xEGz0Hb0auk6BFjq5ZYDNPAObAp3l00MLsuSlmN8dGkBPWK6Onri7x80FP_P_7JWbP5s2CYMLW1iO8-LR0XxVH98C5czojoPDH2qJvfdN_C92zpscJwyWD4mIEDz4hpcsNo2VyGavns4DGDfmX8Ir1fDy2b_Acz")'></div>
+<p class="text-xs font-medium text-text-muted">Prof. Marcus Aurel</p>
+</div>
+<div class="mt-2 flex items-center justify-between">
+<span class="text-xs font-mono font-bold text-text-muted bg-background-light dark:bg-white/10 px-2 py-1 rounded">CODE: HST-110</span>
+<button class="flex items-center gap-1 text-sm font-bold text-primary group-hover:translate-x-1 transition-transform">
+                                    Open <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Class Card 3 -->
+<div class="group relative flex flex-col rounded-xl border border-border-light bg-white p-5 transition-all hover:shadow-md dark:bg-white/5 dark:border-white/10">
+<div class="flex items-start justify-between mb-4">
+<div class="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">functions</span>
+</div>
+<span class="rounded-full bg-green-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-green-700 dark:bg-green-500/20 dark:text-green-400">Active</span>
+</div>
+<h4 class="text-lg font-bold dark:text-white">Calculus III</h4>
+<p class="text-sm text-text-muted">Section: M-302</p>
+<div class="mt-4 flex items-center gap-2 py-3 border-t border-border-light/50 dark:border-white/5">
+<div class="h-6 w-6 rounded-full bg-cover" data-alt="Portrait of Sarah Jenkins" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBHoCTofGtAxPLl8dTv8zX2m5ZAaG6e5ZR6Zl-uPw6g2NmelAaFp5SVraUs4ZwKRui_LYkPJDyTea_8Ky5Wvg4EPMLAhniFcnrXMNGRAEK3JAwena3J0QVhHaj_k7Dbj3YneWe0yUoMBG-4Wee-jZIACR5n61ctFFnWXwrDsqYugocasJMkjkdqObz7FyBgau4OPSZVpCHqxzObPP9Ry9zSpDJ0mxcasHak0ZFgNXrLm0MHVh3wjtlod8jgW6QPA6dtr31calNRqS6K")'></div>
+<p class="text-xs font-medium text-text-muted">Sarah Jenkins</p>
+</div>
+<div class="mt-2 flex items-center justify-between">
+<span class="text-xs font-mono font-bold text-text-muted bg-background-light dark:bg-white/10 px-2 py-1 rounded">CODE: MAT-302</span>
+<button class="flex items-center gap-1 text-sm font-bold text-primary group-hover:translate-x-1 transition-transform">
+                                    Open <span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- Add New Class Placeholder -->
+<div class="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border-light bg-transparent p-5 text-center transition-all hover:border-primary/50 group cursor-pointer dark:border-white/10">
+<div class="mb-2 h-10 w-10 rounded-full bg-primary/5 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined">add</span>
+</div>
+<p class="font-bold text-text-main dark:text-white">Join Another Class</p>
+<p class="text-xs text-text-muted">Enroll in a new subject with a code</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: Sidebar Tasks -->
+<aside class="lg:col-span-4 flex flex-col gap-6">
+<!-- Due Soon Section -->
+<div class="rounded-xl border border-border-light bg-white dark:bg-white/5 dark:border-white/10 overflow-hidden">
+<div class="bg-primary/10 px-5 py-4 border-b border-border-light dark:border-white/10">
+<h3 class="flex items-center gap-2 font-bold text-primary">
+<span class="material-symbols-outlined">priority_high</span>
+                            Due Soon
+                        </h3>
+</div>
+<div class="p-2">
+<!-- Task Item -->
+<div class="flex items-center gap-4 p-3 rounded-lg hover:bg-background-light transition-colors dark:hover:bg-white/5">
+<div class="h-10 w-1 bg-red-500 rounded-full"></div>
+<div class="flex-1">
+<p class="text-sm font-bold dark:text-white">Lab Report: Oxidation</p>
+<p class="text-xs text-text-muted">Chemistry • Due Today, 5:00 PM</p>
+</div>
+<span class="material-symbols-outlined text-text-muted text-sm cursor-pointer hover:text-primary">info</span>
+</div>
+<!-- Task Item -->
+<div class="flex items-center gap-4 p-3 rounded-lg hover:bg-background-light transition-colors dark:hover:bg-white/5">
+<div class="h-10 w-1 bg-orange-400 rounded-full"></div>
+<div class="flex-1">
+<p class="text-sm font-bold dark:text-white">Historical Essay Draft</p>
+<p class="text-xs text-text-muted">History • Tomorrow, 9:00 AM</p>
+</div>
+<span class="material-symbols-outlined text-text-muted text-sm cursor-pointer hover:text-primary">info</span>
+</div>
+</div>
+<div class="p-4 border-t border-border-light dark:border-white/10 bg-background-light/30 dark:bg-white/5">
+<button class="w-full rounded-lg py-2 text-sm font-bold text-primary hover:bg-primary/5 transition-colors">See Calendar</button>
+</div>
+</div>
+<!-- Upcoming Section -->
+<div class="rounded-xl border border-border-light bg-white dark:bg-white/5 dark:border-white/10 overflow-hidden">
+<div class="bg-primary/5 px-5 py-4 border-b border-border-light dark:border-white/10">
+<h3 class="flex items-center gap-2 font-bold text-text-main dark:text-white">
+<span class="material-symbols-outlined">calendar_today</span>
+                            Upcoming Tasks
+                        </h3>
+</div>
+<div class="p-2">
+<!-- Task Item -->
+<div class="flex items-center gap-4 p-3 rounded-lg hover:bg-background-light transition-colors dark:hover:bg-white/5">
+<div class="h-10 w-1 bg-primary/30 rounded-full"></div>
+<div class="flex-1">
+<p class="text-sm font-bold dark:text-white">Math Quiz 3</p>
+<p class="text-xs text-text-muted">Calculus • Friday, Oct 27</p>
+</div>
+</div>
+<!-- Empty Placeholder for variety -->
+<div class="flex flex-col items-center justify-center py-8 text-center px-4">
+<div class="h-12 w-12 rounded-full bg-background-light dark:bg-white/5 flex items-center justify-center text-text-muted/30 mb-2">
+<span class="material-symbols-outlined text-3xl">pending_actions</span>
+</div>
+<p class="text-xs font-medium text-text-muted">No other tasks scheduled for next week.</p>
+</div>
+</div>
+</div>
+<!-- Learning Progress Mini Widget -->
+<div class="rounded-xl bg-gradient-to-br from-primary to-[#6e45f9] p-6 text-white shadow-xl shadow-primary/20">
+<p class="text-sm font-medium text-white/80">Weekly Progress</p>
+<h4 class="mt-1 text-2xl font-bold">82% Completed</h4>
+<div class="mt-4 h-2 w-full rounded-full bg-white/20">
+<div class="h-full w-[82%] rounded-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)]"></div>
+</div>
+<p class="mt-3 text-xs text-white/70 italic">"Keep going Alex, you're ahead of schedule!"</p>
+</div>
+</aside>
+</div>
+</main>
+<!-- Footer Meta -->
+<footer class="mx-auto max-w-7xl px-6 py-10 border-t border-border-light dark:border-white/10 mt-12">
+<div class="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-text-muted">
+<p>© 2023 Task Scheduling Agent. Built for Student Success.</p>
+<div class="flex gap-6">
+<a class="hover:text-primary" href="#">Support Center</a>
+<a class="hover:text-primary" href="#">Privacy Policy</a>
+<a class="hover:text-primary" href="#">API Documentation</a>
+</div>
+</div>
+</footer>
+</body></html>
