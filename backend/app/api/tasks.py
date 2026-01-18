@@ -229,29 +229,43 @@ async def get_evaluations_summary(
     await _ensure_teacher_owns_subject(current_teacher["uid"], subject_oid)
 
     submissions_collection = get_collection("submissions")
-    submissions = await submissions_collection.find({"task_id": task["_id"]}).to_list(length=None)
+    pipeline = [
+        {"$match": {"task_id": task["_id"]}},
+        {
+            "$project": {
+                "status": {"$ifNull": ["$evaluation.status", "pending"]},
+                "ai_score": "$evaluation.ai_score",
+            }
+        },
+        {
+            "$facet": {
+                "counts": [{"$group": {"_id": "$status", "count": {"$sum": 1}}}],
+                "summary": [{"$group": {"_id": None, "total": {"$sum": 1}, "avg": {"$avg": "$ai_score"}}}],
+            }
+        },
+    ]
+
+    agg = await submissions_collection.aggregate(pipeline).to_list(length=1)
+    doc = agg[0] if agg else {}
+    counts = doc.get("counts") if isinstance(doc.get("counts"), list) else []
+    summary = doc.get("summary") if isinstance(doc.get("summary"), list) else []
+    summary_doc = summary[0] if summary else {}
 
     status_counts: dict[str, int] = {}
-    total = 0
-    score_sum = 0.0
-    score_count = 0
+    for row in counts:
+        if not isinstance(row, dict):
+            continue
+        key = str(row.get("_id") or "pending")
+        status_counts[key] = int(row.get("count") or 0)
 
-    for s in submissions:
-        total += 1
-        ev = s.get("evaluation") if isinstance(s.get("evaluation"), dict) else None
-        st = str(ev.get("status") if ev else "pending")
-        status_counts[st] = status_counts.get(st, 0) + 1
-        ai_score = ev.get("ai_score") if ev else None
-        if isinstance(ai_score, (int, float)):
-            score_sum += float(ai_score)
-            score_count += 1
-
-    avg = (score_sum / score_count) if score_count else None
+    total = int(summary_doc.get("total") or sum(status_counts.values()))
+    avg = summary_doc.get("avg")
+    average_ai_score = float(avg) if isinstance(avg, (int, float)) else None
     return TaskEvaluationsSummaryResponse(
         task_id=task_id,
         total_submissions=total,
         status_counts=status_counts,
-        average_ai_score=avg,
+        average_ai_score=average_ai_score,
     )
 
 

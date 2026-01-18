@@ -12,6 +12,7 @@ from app.database.collections import get_collection
 from app.models.submission import (
     BatchEvaluateRequest,
     BatchEvaluateResponse,
+    EvaluationProgressResponse,
     SubmissionAttachmentResponse,
     SubmissionGradeRequest,
     SubmissionEvaluation,
@@ -522,15 +523,11 @@ async def get_evaluation(
     return SubmissionEvaluation.model_validate(evaluation)
 
 
-@router.get("/{submission_id}/evaluation/progress")
+@router.get("/{submission_id}/evaluation/progress", response_model=EvaluationProgressResponse)
 async def get_evaluation_progress(
     submission_id: str,
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    Lightweight endpoint for polling evaluation progress.
-    Returns current status and progress percentage.
-    """
     if not ObjectId.is_valid(submission_id):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid submission id")
 
@@ -560,48 +557,28 @@ async def get_evaluation_progress(
 
     evaluation = submission.get("evaluation")
     if not evaluation or not isinstance(evaluation, dict):
-        return {
-            "status": "not_started",
-            "progress": 0,
-            "message": "Evaluation not started",
-        }
+        return EvaluationProgressResponse(status="pending", progress=0, message="Evaluation not started")
 
     eval_status = str(evaluation.get("status", "pending")).lower()
+    if eval_status not in {"pending", "running", "completed", "failed"}:
+        eval_status = "pending"
 
     # Calculate progress percentage based on status
-    progress_map = {
-        "pending": 10,
-        "running": 50,
-        "completed": 100,
-        "failed": 100,
-    }
-
-    progress = progress_map.get(eval_status, 0)
-
-    # Generate status message
-    messages = {
+    progress_map = {"pending": 10, "running": 50, "completed": 100, "failed": 100}
+    message_map = {
         "pending": "Evaluation queued...",
         "running": "Evaluating submission...",
         "completed": "Evaluation complete",
         "failed": "Evaluation failed",
     }
 
-    message = messages.get(eval_status, "Unknown status")
-
-    # Add score if completed
-    response = {
-        "status": eval_status,
-        "progress": progress,
-        "message": message,
-    }
-
-    if eval_status == "completed":
-        response["ai_score"] = evaluation.get("ai_score")
-
-    if eval_status == "failed":
-        response["error"] = evaluation.get("last_error")
-
-    return response
+    return EvaluationProgressResponse(
+        status=eval_status,
+        progress=progress_map.get(eval_status, 0),
+        message=message_map.get(eval_status, "Unknown status"),
+        ai_score=evaluation.get("ai_score") if eval_status == "completed" else None,
+        error=evaluation.get("last_error") if eval_status == "failed" else None,
+    )
 
 
 @router.post("/batch/evaluate", response_model=BatchEvaluateResponse)

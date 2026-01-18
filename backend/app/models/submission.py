@@ -8,7 +8,6 @@ EvaluationStatus = Literal["pending", "running", "completed", "failed"]
 
 
 class TestCaseResult(BaseModel):
-    """Detailed result for a single test case."""
     case_number: int
     description: str = ""
     points: int = 1
@@ -56,6 +55,14 @@ class BatchEvaluateResponse(BaseModel):
     queued: int
 
 
+class EvaluationProgressResponse(BaseModel):
+    status: EvaluationStatus
+    progress: int = Field(ge=0, le=100)
+    message: str
+    ai_score: Optional[int] = Field(default=None, ge=0, le=100)
+    error: Optional[str] = None
+
+
 class SubmissionAttachmentResponse(BaseModel):
     id: str
     filename: str
@@ -89,4 +96,3 @@ class SubmissionResponse(BaseModel):
     feedback: Optional[str] = None
     attachments: list[SubmissionAttachmentResponse] = Field(default_factory=list)
     evaluation: Optional[SubmissionEvaluation] = None
-    attachments: list[SubmissionAttachmentResponse] = Field(default_factory=list)

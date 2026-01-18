@@ -282,35 +282,26 @@ const TaskView = () => {
     }
   };
 
-  // Poll for evaluation progress on running evaluations
   useEffect(() => {
     if (userRole !== 'teacher') return;
 
-    const runningEvaluations = submissions.filter(
-      (s) => s?.evaluation?.status === 'pending' || s?.evaluation?.status === 'running'
-    );
+    const runningIds = submissions
+      .filter((s) => s?.evaluation?.status === 'pending' || s?.evaluation?.status === 'running')
+      .map((s) => s.id)
+      .filter(Boolean);
 
-    if (runningEvaluations.length === 0) return;
+    if (runningIds.length === 0) return;
 
     const pollInterval = setInterval(async () => {
-      let updated = false;
-      for (const sub of runningEvaluations) {
-        try {
-          const response = await api.get(`/submissions/${sub.id}/evaluation/progress`);
-          const { status, progress } = response.data || {};
-
-          if (status === 'completed' || status === 'failed') {
-            updated = true;
-          }
-        } catch (err) {
-          console.error('Failed to poll evaluation progress:', err);
-        }
-      }
-
-      if (updated) {
-        await loadSubmissions();
-      }
-    }, 3000); // Poll every 3 seconds
+      const results = await Promise.all(
+        runningIds.map((sid) => api.get(`/submissions/${sid}/evaluation/progress`).catch(() => null))
+      );
+      const updated = results.some((r) => {
+        const st = r?.data?.status;
+        return st === 'completed' || st === 'failed';
+      });
+      if (updated) await loadSubmissions();
+    }, 3000);
 
     return () => clearInterval(pollInterval);
   }, [submissions, userRole]);
