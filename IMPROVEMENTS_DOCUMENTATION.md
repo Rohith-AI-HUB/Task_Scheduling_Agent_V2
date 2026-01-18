@@ -1,12 +1,30 @@
 # Task Scheduling Agent V2 — Improvements & Fixes
 
-**Version:** 2.2  
-**Updated:** 2026-01-18T22:23:58.6018138+05:30  
-**Status:** Phase 5 hardened for non-Docker deployment (Render)
+**Version:** 2.3  
+**Updated:** 2026-01-18T22:49:38.1721075+05:30  
+**Status:** Phase 5 configurable via teacher UI (baseline)
 
 ---
 
 ## Change Log (Version-Controlled)
+
+### 2026-01-18T22:49:38.1721075+05:30
+
+- **Issue:** Teachers could not configure evaluation settings without manual DB edits.
+  - **Current state (before):** `evaluation_config` existed but had no web UI editor.
+  - **Enhancement:** Add a teacher UI to configure evaluation settings and test cases at task creation and edit time.
+  - **Action taken:** Added `EvaluationConfigEditor` component, integrated into task creation (Subject view) and task editing (Task view).
+  - **Files:** [EvaluationConfigEditor.jsx](file:///C:/Users/rohit/Documents/PYTHON/Task_Scheduling_Agent_V2/frontend-web/src/components/EvaluationConfigEditor.jsx), [SubjectView.jsx](file:///C:/Users/rohit/Documents/PYTHON/Task_Scheduling_Agent_V2/frontend-web/src/pages/SubjectView.jsx), [TaskView.jsx](file:///C:/Users/rohit/Documents/PYTHON/Task_Scheduling_Agent_V2/frontend-web/src/pages/TaskView.jsx)
+
+- **Issue:** Clearing `evaluation_config` on an existing task was not possible through the update API.
+  - **Current state (before):** `PUT /tasks/{id}` only updated `evaluation_config` when it was non-null, so setting it to null had no effect.
+  - **Enhancement:** Allow explicit field clearing while preserving “omit means no change” semantics.
+  - **Action taken:** Updated task update logic to use field presence (`model_fields_set`) for optional fields.
+  - **Files:** [tasks.py](file:///C:/Users/rohit/Documents/PYTHON/Task_Scheduling_Agent_V2/backend/app/api/tasks.py)
+
+- **Verification (post-change):**
+  - Backend: `python -m pytest` (17 passed)
+  - Frontend: `npm run lint` (0 warnings), `npm run build` (success)
 
 ### 2026-01-18T22:23:58.6018138+05:30
 
@@ -171,6 +189,14 @@ The baseline intentionally prioritizes safe defaults and clear API contracts for
     - “Evaluate All” for the task
     - Results panel (score, tests, word count, feedback, error)
     - Automatic polling while any evaluation is pending/running
+
+- **Evaluation configuration UI**
+  - Create: Subject page → “Create New Task” → Evaluation section
+    - File: [SubjectView.jsx](file:///C:/Users/rohit/Documents/PYTHON/Task_Scheduling_Agent_V2/frontend-web/src/pages/SubjectView.jsx)
+  - Edit: Task page → “Edit Task” → Evaluation section
+    - File: [TaskView.jsx](file:///C:/Users/rohit/Documents/PYTHON/Task_Scheduling_Agent_V2/frontend-web/src/pages/TaskView.jsx)
+  - Editor component: [EvaluationConfigEditor.jsx](file:///C:/Users/rohit/Documents/PYTHON/Task_Scheduling_Agent_V2/frontend-web/src/components/EvaluationConfigEditor.jsx)
+  - Note: Java/JavaScript require runtime availability on the backend host.
 
 ---
 

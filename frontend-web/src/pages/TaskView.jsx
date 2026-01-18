@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import EvaluationResults from '../components/EvaluationResults';
+import EvaluationConfigEditor from '../components/EvaluationConfigEditor';
 
 const TaskView = () => {
   const { id } = useParams();
@@ -48,6 +49,15 @@ const TaskView = () => {
   const [evaluationLoading, setEvaluationLoading] = useState({});
   const [batchEvaluationLoading, setBatchEvaluationLoading] = useState(false);
   const [evaluationSummary, setEvaluationSummary] = useState(null);
+  const [isEditTaskOpen, setIsEditTaskOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editDeadline, setEditDeadline] = useState('');
+  const [editPoints, setEditPoints] = useState('');
+  const [editTaskType, setEditTaskType] = useState('');
+  const [editEvaluationConfig, setEditEvaluationConfig] = useState(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [taskEditError, setTaskEditError] = useState('');
   const pendingReviewCount = useMemo(
     () => submissions.filter((s) => s?.score === null || s?.score === undefined).length,
     [submissions]
@@ -100,6 +110,54 @@ const TaskView = () => {
     const d = new Date(deadline);
     if (Number.isNaN(d.getTime())) return null;
     return d.toLocaleString();
+  };
+
+  const toDatetimeLocalValue = (value) => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const mm = pad(d.getMonth() + 1);
+    const dd = pad(d.getDate());
+    const hh = pad(d.getHours());
+    const mi = pad(d.getMinutes());
+    return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+  };
+
+  const openEditTask = () => {
+    if (!task) return;
+    setTaskEditError('');
+    setEditTitle(task.title || '');
+    setEditDescription(task.description || '');
+    setEditDeadline(toDatetimeLocalValue(task.deadline));
+    setEditPoints(typeof task.points === 'number' ? String(task.points) : '');
+    setEditTaskType(task.task_type || '');
+    setEditEvaluationConfig(task.evaluation_config || null);
+    setIsEditTaskOpen(true);
+  };
+
+  const saveTaskEdits = async () => {
+    if (!id) return;
+    setEditSaving(true);
+    setTaskEditError('');
+    try {
+      const payload = {
+        title: editTitle,
+        description: editDescription ? editDescription : null,
+        deadline: editDeadline ? new Date(editDeadline).toISOString() : null,
+        points: editPoints !== '' ? Number(editPoints) : null,
+        task_type: editTaskType ? editTaskType : null,
+        evaluation_config: editEvaluationConfig,
+      };
+      const response = await api.put(`/tasks/${id}`, payload);
+      setTask(response.data);
+      setIsEditTaskOpen(false);
+    } catch (err) {
+      setTaskEditError(getErrorMessage(err, 'Failed to update task'));
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   const submitOrUpdate = async () => {
@@ -392,9 +450,9 @@ const TaskView = () => {
           </header>
 
           <main className="max-w-[960px] mx-auto px-6 py-8">
-            {(error || submissionError) && (
+            {(error || submissionError || taskEditError) && (
               <div className="mb-6 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
-                {error || submissionError}
+                {error || submissionError || taskEditError}
               </div>
             )}
 
@@ -431,7 +489,12 @@ const TaskView = () => {
                         </div>
                       </div>
                       <div className="mt-6 flex justify-end">
-                        <button className="bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all text-sm font-bold px-5 py-2 rounded-lg flex items-center gap-2">
+                        <button
+                          className="bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all text-sm font-bold px-5 py-2 rounded-lg flex items-center gap-2 disabled:opacity-60"
+                          onClick={openEditTask}
+                          type="button"
+                          disabled={editSaving}
+                        >
                           <span className="material-symbols-outlined text-lg">edit</span>
                           Edit Task
                         </button>
@@ -942,6 +1005,133 @@ const TaskView = () => {
               </>
             )}
           </main>
+          {isEditTaskOpen ? (
+            <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
+              <div
+                className="absolute inset-0"
+                onClick={() => {
+                  if (editSaving) return;
+                  setIsEditTaskOpen(false);
+                }}
+              ></div>
+              <div className="relative bg-white dark:bg-[#1c1633] w-full max-w-[700px] max-h-[90vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-700">
+                <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                  <h2 className="text-xl font-bold text-[#110d1c] dark:text-white">Edit Task</h2>
+                  <button
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                    onClick={() => {
+                      if (editSaving) return;
+                      setIsEditTaskOpen(false);
+                    }}
+                    type="button"
+                  >
+                    <span className="material-symbols-outlined">close</span>
+                  </button>
+                </div>
+                <div className="p-6 space-y-6 flex-1 min-h-0 overflow-y-auto">
+                  {taskEditError ? (
+                    <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+                      {taskEditError}
+                    </div>
+                  ) : null}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                        Task Title
+                      </label>
+                      <input
+                        className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        disabled={editSaving}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                        Deadline
+                      </label>
+                      <input
+                        className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                        type="datetime-local"
+                        value={editDeadline}
+                        onChange={(e) => setEditDeadline(e.target.value)}
+                        disabled={editSaving}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                        Points
+                      </label>
+                      <input
+                        className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                        type="number"
+                        value={editPoints}
+                        onChange={(e) => setEditPoints(e.target.value)}
+                        disabled={editSaving}
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                        Task Type
+                      </label>
+                      <select
+                        className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                        value={editTaskType}
+                        onChange={(e) => setEditTaskType(e.target.value)}
+                        disabled={editSaving}
+                      >
+                        <option value="">Select</option>
+                        <option value="Quiz">Quiz</option>
+                        <option value="Assignment">Assignment</option>
+                        <option value="Project">Project</option>
+                        <option value="Extra Credit">Extra Credit</option>
+                      </select>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                        Description
+                      </label>
+                      <textarea
+                        className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                        rows="4"
+                        value={editDescription}
+                        onChange={(e) => setEditDescription(e.target.value)}
+                        disabled={editSaving}
+                      ></textarea>
+                    </div>
+                    <div className="md:col-span-2">
+                      <EvaluationConfigEditor
+                        value={editEvaluationConfig}
+                        onChange={(next) => setEditEvaluationConfig(next)}
+                        disabled={editSaving}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="p-6 bg-gray-50 dark:bg-gray-900/50 flex justify-end gap-3">
+                  <button
+                    className="px-6 py-2.5 rounded-lg text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors disabled:opacity-60"
+                    onClick={() => {
+                      if (editSaving) return;
+                      setIsEditTaskOpen(false);
+                    }}
+                    type="button"
+                    disabled={editSaving}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="px-8 py-2.5 rounded-lg bg-primary text-white text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-60"
+                    onClick={saveTaskEdits}
+                    disabled={!editTitle.trim() || editSaving}
+                    type="button"
+                  >
+                    {editSaving ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </>
       ) : (
         <div className="relative flex h-screen w-full flex-col overflow-y-auto overflow-x-hidden">

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import EvaluationConfigEditor from '../components/EvaluationConfigEditor';
 
 const SubjectView = () => {
   const { id } = useParams();
@@ -25,6 +26,7 @@ const SubjectView = () => {
   const [problemStatements, setProblemStatements] = useState(['']);
   const [bulkProblems, setBulkProblems] = useState('');
   const [previewNonce, setPreviewNonce] = useState(0);
+  const [evaluationConfig, setEvaluationConfig] = useState(null);
   const [taskCreateError, setTaskCreateError] = useState('');
   const [taskCreating, setTaskCreating] = useState(false);
   const [sortMode, setSortMode] = useState('deadline');
@@ -986,6 +988,16 @@ const SubjectView = () => {
                     disabled={taskCreating}
                   ></textarea>
                 </div>
+                <div className="md:col-span-2">
+                  <EvaluationConfigEditor
+                    value={evaluationConfig}
+                    onChange={(next) => {
+                      setEvaluationConfig(next);
+                      setTaskCreateError('');
+                    }}
+                    disabled={taskCreating}
+                  />
+                </div>
                 {taskKind === 'group' ? (
                   <div className="md:col-span-2 space-y-3">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1161,6 +1173,7 @@ const SubjectView = () => {
                       task_type: taskType ? taskType : null,
                       type: taskKind,
                     };
+                    if (evaluationConfig) payload.evaluation_config = evaluationConfig;
                     if (taskKind === 'group') {
                       const size = Number(groupSize);
                       if (!Number.isFinite(size) || size < 2) throw new Error('Group size must be at least 2');
@@ -1180,6 +1193,7 @@ const SubjectView = () => {
                     setProblemStatements(['']);
                     setBulkProblems('');
                     setPreviewNonce(0);
+                    setEvaluationConfig(null);
                     setIsCreateTaskOpen(false);
                   } catch (err) {
                     setTaskCreateError(getErrorMessage(err, 'Failed to create task'));

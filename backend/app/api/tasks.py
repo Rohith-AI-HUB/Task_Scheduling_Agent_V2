@@ -181,31 +181,34 @@ async def update_task(
     await _ensure_teacher_owns_subject(current_teacher["uid"], subject_oid)
 
     update: dict = {"updated_at": datetime.utcnow()}
-    if request.title is not None:
+    fields_set = request.model_fields_set
+    if "title" in fields_set:
         update["title"] = request.title.strip()
-    if request.description is not None:
+    if "description" in fields_set:
         update["description"] = request.description.strip() if request.description else None
-    if request.deadline is not None:
+    if "deadline" in fields_set:
         update["deadline"] = request.deadline
-    if request.points is not None:
+    if "points" in fields_set:
         update["points"] = request.points
-    if request.task_type is not None:
+    if "task_type" in fields_set:
         update["task_type"] = request.task_type.strip() if request.task_type else None
-    if request.type is not None:
+    if "type" in fields_set:
         update["type"] = request.type
         if request.type != "group":
             update["problem_statements"] = []
             update["group_settings"] = None
-    if request.problem_statements is not None:
+    if "problem_statements" in fields_set:
         update["problem_statements"] = [
             s.strip()
             for s in (request.problem_statements or [])
             if isinstance(s, str) and s.strip()
         ]
-    if request.group_settings is not None:
-        update["group_settings"] = request.group_settings.model_dump()
-    if request.evaluation_config is not None:
-        update["evaluation_config"] = request.evaluation_config.model_dump()
+    if "group_settings" in fields_set:
+        update["group_settings"] = request.group_settings.model_dump() if request.group_settings else None
+    if "evaluation_config" in fields_set:
+        update["evaluation_config"] = (
+            request.evaluation_config.model_dump() if request.evaluation_config else None
+        )
 
     tasks_collection = get_collection("tasks")
     await tasks_collection.update_one({"_id": task["_id"]}, {"$set": update})
