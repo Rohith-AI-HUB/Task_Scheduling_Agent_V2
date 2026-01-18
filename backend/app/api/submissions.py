@@ -10,11 +10,15 @@ from pymongo.errors import DuplicateKeyError
 from app.config import settings
 from app.database.collections import get_collection
 from app.models.submission import (
+    BatchEvaluateRequest,
+    BatchEvaluateResponse,
     SubmissionAttachmentResponse,
     SubmissionGradeRequest,
+    SubmissionEvaluation,
     SubmissionResponse,
     SubmissionUpsertRequest,
 )
+from app.services.submission_service import queue_evaluation
 from app.utils.dependencies import get_current_student, get_current_teacher, get_current_user
 
 router = APIRouter()
@@ -57,6 +61,7 @@ def _serialize_submission(doc: dict) -> SubmissionResponse:
         score=doc.get("score"),
         feedback=doc.get("feedback"),
         attachments=attachments,
+        evaluation=SubmissionEvaluation.model_validate(doc.get("evaluation")) if doc.get("evaluation") else None,
     )
 
 
@@ -463,6 +468,85 @@ async def list_submissions(
         .to_list(length=None)
     )
     return [_serialize_submission(s) for s in submissions]
+
+
+@router.post("/{submission_id}/evaluate", response_model=SubmissionResponse)
+async def evaluate_submission(
+    submission_id: str,
+    current_teacher: dict = Depends(get_current_teacher),
+):
+    if not ObjectId.is_valid(submission_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid submission id")
+
+    submission_oid = ObjectId(submission_id)
+    submission = await _find_submission_or_404(submission_oid)
+
+    task = await _find_task_or_404(submission["task_id"])
+    await _ensure_teacher_owns_subject(current_teacher["uid"], task["subject_id"])
+
+    updated = await queue_evaluation(submission_id=submission_oid)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found")
+    return _serialize_submission(updated)
+
+
+@router.get("/{submission_id}/evaluation", response_model=SubmissionEvaluation)
+async def get_evaluation(
+    submission_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    if not ObjectId.is_valid(submission_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid submission id")
+
+    submission_oid = ObjectId(submission_id)
+    submission = await _find_submission_or_404(submission_oid)
+    task = await _find_task_or_404(submission["task_id"])
+    subject_oid = task["subject_id"]
+
+    if current_user.get("role") == "teacher":
+        await _ensure_teacher_owns_subject(current_user["uid"], subject_oid)
+    else:
+        if submission.get("group_id") is not None:
+            groups_collection = get_collection("groups")
+            group = await groups_collection.find_one({"_id": submission["group_id"], "member_uids": current_user["uid"]})
+            if not group:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        else:
+            if submission.get("student_uid") != current_user.get("uid"):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        await _ensure_student_enrolled(current_user["uid"], subject_oid)
+
+    evaluation = submission.get("evaluation")
+    if not evaluation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evaluation not found")
+    return SubmissionEvaluation.model_validate(evaluation)
+
+
+@router.post("/batch/evaluate", response_model=BatchEvaluateResponse)
+async def batch_evaluate(
+    request: BatchEvaluateRequest,
+    current_teacher: dict = Depends(get_current_teacher),
+):
+    if not ObjectId.is_valid(request.task_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid task id")
+
+    task_oid = ObjectId(request.task_id)
+    task = await _find_task_or_404(task_oid)
+    await _ensure_teacher_owns_subject(current_teacher["uid"], task["subject_id"])
+
+    submissions_collection = get_collection("submissions")
+    submissions = await submissions_collection.find({"task_id": task_oid}).to_list(length=None)
+
+    queued = 0
+    for s in submissions:
+        sid = s.get("_id")
+        if not sid:
+            continue
+        updated = await queue_evaluation(submission_id=sid)
+        if updated is not None:
+            queued += 1
+
+    return BatchEvaluateResponse(queued=queued)
 
 
 @router.patch("/{submission_id}/grade", response_model=SubmissionResponse)

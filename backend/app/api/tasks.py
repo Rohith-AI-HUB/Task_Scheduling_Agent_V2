@@ -4,7 +4,12 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.database.collections import get_collection
-from app.models.task import TaskCreateRequest, TaskResponse, TaskUpdateRequest
+from app.models.task import (
+    TaskCreateRequest,
+    TaskEvaluationsSummaryResponse,
+    TaskResponse,
+    TaskUpdateRequest,
+)
 from app.utils.dependencies import get_current_teacher, get_current_user
 
 router = APIRouter()
@@ -212,6 +217,42 @@ async def delete_task(task_id: str, current_teacher: dict = Depends(get_current_
 
     tasks_collection = get_collection("tasks")
     await tasks_collection.delete_one({"_id": task["_id"]})
+
+
+@router.get("/{task_id}/evaluations/summary", response_model=TaskEvaluationsSummaryResponse)
+async def get_evaluations_summary(
+    task_id: str,
+    current_teacher: dict = Depends(get_current_teacher),
+):
+    task = await _find_task_or_404(task_id)
+    subject_oid = task["subject_id"]
+    await _ensure_teacher_owns_subject(current_teacher["uid"], subject_oid)
+
+    submissions_collection = get_collection("submissions")
+    submissions = await submissions_collection.find({"task_id": task["_id"]}).to_list(length=None)
+
+    status_counts: dict[str, int] = {}
+    total = 0
+    score_sum = 0.0
+    score_count = 0
+
+    for s in submissions:
+        total += 1
+        ev = s.get("evaluation") if isinstance(s.get("evaluation"), dict) else None
+        st = str(ev.get("status") if ev else "pending")
+        status_counts[st] = status_counts.get(st, 0) + 1
+        ai_score = ev.get("ai_score") if ev else None
+        if isinstance(ai_score, (int, float)):
+            score_sum += float(ai_score)
+            score_count += 1
+
+    avg = (score_sum / score_count) if score_count else None
+    return TaskEvaluationsSummaryResponse(
+        task_id=task_id,
+        total_submissions=total,
+        status_counts=status_counts,
+        average_ai_score=avg,
+    )
 
 
 @router.get("/health")

@@ -48,3 +48,10 @@ class TaskResponse(BaseModel):
     group_settings: Optional[TaskGroupSettings] = None
     created_at: datetime
     updated_at: datetime
+
+
+class TaskEvaluationsSummaryResponse(BaseModel):
+    task_id: str
+    total_submissions: int
+    status_counts: dict[str, int] = Field(default_factory=dict)
+    average_ai_score: float | None = None
