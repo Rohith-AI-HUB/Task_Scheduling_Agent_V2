@@ -27,6 +27,7 @@ def _serialize_task(doc: dict) -> TaskResponse:
         type=doc.get("type", "individual"),
         problem_statements=list(doc.get("problem_statements") or []),
         group_settings=doc.get("group_settings"),
+        evaluation_config=doc.get("evaluation_config"),
         created_at=doc["created_at"],
         updated_at=doc["updated_at"],
     )
@@ -86,6 +87,7 @@ async def create_task(
         "type": request.type,
         "problem_statements": normalized_problem_statements if request.type == "group" else [],
         "group_settings": request.group_settings.model_dump() if request.type == "group" and request.group_settings else None,
+        "evaluation_config": request.evaluation_config.model_dump() if request.evaluation_config else None,
         "created_at": now,
         "updated_at": now,
     }
@@ -202,6 +204,8 @@ async def update_task(
         ]
     if request.group_settings is not None:
         update["group_settings"] = request.group_settings.model_dump()
+    if request.evaluation_config is not None:
+        update["evaluation_config"] = request.evaluation_config.model_dump()
 
     tasks_collection = get_collection("tasks")
     await tasks_collection.update_one({"_id": task["_id"]}, {"$set": update})

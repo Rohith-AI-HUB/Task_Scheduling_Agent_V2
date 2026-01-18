@@ -4,6 +4,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any, Literal
 
@@ -77,6 +78,7 @@ def _run_python_code(
     stdin_text: str | None,
     timeout_ms: int,
     memory_limit_mb: int = 256,
+    max_output_bytes: int = 64 * 1024,
 ) -> subprocess.CompletedProcess[str]:
     """Run Python code with resource restrictions."""
 
@@ -84,11 +86,11 @@ def _run_python_code(
 
     # Create a wrapper script that sets resource limits
     wrapper = f"""
-import resource
 import sys
 
 # Set memory limit (soft and hard limit in bytes)
 try:
+    import resource
     memory_bytes = {memory_limit_mb} * 1024 * 1024
     resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
 except Exception:
@@ -96,6 +98,7 @@ except Exception:
 
 # Set CPU time limit (soft and hard limit in seconds)
 try:
+    import resource
     cpu_seconds = max(1, {timeout_ms} // 1000)
     resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))
 except Exception:
@@ -111,17 +114,13 @@ with open(r"{program_path}", "r", encoding="utf-8") as f:
 
     cmd = [sys.executable, "-I", "-u", str(wrapper_path)]
 
-    try:
-        return subprocess.run(
-            cmd,
-            input=stdin_text,
-            text=True,
-            capture_output=True,
-            cwd=str(program_path.parent),
-            timeout=max(0.1, timeout_ms / 1000.0),
-        )
-    except subprocess.TimeoutExpired as e:
-        raise e
+    return _run_with_output_limit(
+        cmd=cmd,
+        cwd=str(program_path.parent),
+        stdin_text=stdin_text,
+        timeout_ms=timeout_ms,
+        max_output_bytes=max_output_bytes,
+    )
 
 
 def _run_javascript_code(
@@ -129,6 +128,7 @@ def _run_javascript_code(
     program_path: Path,
     stdin_text: str | None,
     timeout_ms: int,
+    max_output_bytes: int = 64 * 1024,
 ) -> subprocess.CompletedProcess[str]:
     """Run JavaScript code using Node.js."""
 
@@ -139,13 +139,12 @@ def _run_javascript_code(
 
     cmd = [node_cmd, str(program_path)]
 
-    return subprocess.run(
-        cmd,
-        input=stdin_text,
-        text=True,
-        capture_output=True,
+    return _run_with_output_limit(
+        cmd=cmd,
         cwd=str(program_path.parent),
-        timeout=max(0.1, timeout_ms / 1000.0),
+        stdin_text=stdin_text,
+        timeout_ms=timeout_ms,
+        max_output_bytes=max_output_bytes,
     )
 
 
@@ -154,6 +153,7 @@ def _run_java_code(
     program_path: Path,
     stdin_text: str | None,
     timeout_ms: int,
+    max_output_bytes: int = 64 * 1024,
 ) -> subprocess.CompletedProcess[str]:
     """Run Java code."""
 
@@ -181,14 +181,105 @@ def _run_java_code(
     # Run
     run_cmd = ["java", "-cp", str(program_path.parent), class_name]
 
-    return subprocess.run(
-        run_cmd,
-        input=stdin_text,
-        text=True,
-        capture_output=True,
+    return _run_with_output_limit(
+        cmd=run_cmd,
         cwd=str(program_path.parent),
-        timeout=max(0.1, timeout_ms / 1000.0),
+        stdin_text=stdin_text,
+        timeout_ms=timeout_ms,
+        max_output_bytes=max_output_bytes,
     )
+
+
+def _run_with_output_limit(
+    *,
+    cmd: list[str],
+    cwd: str,
+    stdin_text: str | None,
+    timeout_ms: int,
+    max_output_bytes: int,
+) -> subprocess.CompletedProcess[str]:
+    proc = subprocess.Popen(
+        cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=cwd,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    stdout_chunks: list[str] = []
+    stderr_chunks: list[str] = []
+    stdout_size = 0
+    stderr_size = 0
+    exceeded = threading.Event()
+
+    def _reader(stream, chunks: list[str], is_stdout: bool) -> None:
+        nonlocal stdout_size, stderr_size
+        try:
+            while True:
+                data = stream.read(4096)
+                if not data:
+                    break
+                if is_stdout:
+                    stdout_size += len(data.encode("utf-8", errors="ignore"))
+                    if stdout_size > max_output_bytes:
+                        exceeded.set()
+                        try:
+                            proc.kill()
+                        except Exception:
+                            pass
+                        break
+                else:
+                    stderr_size += len(data.encode("utf-8", errors="ignore"))
+                    if stderr_size > max_output_bytes:
+                        exceeded.set()
+                        try:
+                            proc.kill()
+                        except Exception:
+                            pass
+                        break
+                chunks.append(data)
+        except Exception:
+            pass
+
+    t_out = threading.Thread(target=_reader, args=(proc.stdout, stdout_chunks, True), daemon=True)
+    t_err = threading.Thread(target=_reader, args=(proc.stderr, stderr_chunks, False), daemon=True)
+    t_out.start()
+    t_err.start()
+
+    try:
+        if stdin_text is not None and proc.stdin is not None:
+            proc.stdin.write(stdin_text)
+        if proc.stdin is not None:
+            proc.stdin.close()
+    except Exception:
+        try:
+            if proc.stdin is not None:
+                proc.stdin.close()
+        except Exception:
+            pass
+
+    try:
+        proc.wait(timeout=max(0.1, timeout_ms / 1000.0))
+    except subprocess.TimeoutExpired as e:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        raise e
+
+    t_out.join(timeout=0.2)
+    t_err.join(timeout=0.2)
+
+    stdout = "".join(stdout_chunks)
+    stderr = "".join(stderr_chunks)
+
+    if exceeded.is_set():
+        return subprocess.CompletedProcess(cmd, returncode=137, stdout=stdout, stderr="Output limit exceeded")
+
+    return subprocess.CompletedProcess(cmd, returncode=proc.returncode or 0, stdout=stdout, stderr=stderr)
 
 
 def run_code_tests(
@@ -198,7 +289,9 @@ def run_code_tests(
     test_cases: list[dict[str, Any]] | None = None,
     timeout_ms: int = 2000,
     memory_limit_mb: int = 256,
+    max_output_kb: int = 64,
     enable_quality_checks: bool = True,
+    security_mode: Literal["warn", "block"] = "warn",
 ) -> dict[str, Any]:
     """
     Run code tests with enhanced security and features.
@@ -235,6 +328,16 @@ def run_code_tests(
     warnings = []
     if enable_quality_checks:
         warnings = _check_code_quality(code, language)
+    if security_mode == "block" and any("unsafe" in w.lower() or "dynamic" in w.lower() for w in warnings):
+        return {
+            "passed": 0,
+            "failed": 0,
+            "total_points": 0,
+            "earned_points": 0,
+            "errors": ["Blocked by security policy"],
+            "warnings": warnings,
+            "test_results": [],
+        }
 
     cases = list(test_cases or [])
     passed = 0
@@ -255,11 +358,30 @@ def run_code_tests(
         if not cases:
             try:
                 if language == "python":
-                    res = _run_python_code(code, program_path, None, timeout_ms, memory_limit_mb)
+                    res = _run_python_code(
+                        code,
+                        program_path,
+                        None,
+                        timeout_ms,
+                        memory_limit_mb,
+                        max_output_bytes=max(1024, int(max_output_kb) * 1024),
+                    )
                 elif language == "javascript":
-                    res = _run_javascript_code(code, program_path, None, timeout_ms)
+                    res = _run_javascript_code(
+                        code,
+                        program_path,
+                        None,
+                        timeout_ms,
+                        max_output_bytes=max(1024, int(max_output_kb) * 1024),
+                    )
                 elif language == "java":
-                    res = _run_java_code(code, program_path, None, timeout_ms)
+                    res = _run_java_code(
+                        code,
+                        program_path,
+                        None,
+                        timeout_ms,
+                        max_output_bytes=max(1024, int(max_output_kb) * 1024),
+                    )
                 else:
                     return {
                         "passed": 0,
@@ -337,11 +459,30 @@ def run_code_tests(
 
             try:
                 if language == "python":
-                    out_res = _run_python_code(code, program_path, stdin_text, timeout_used, memory_limit_mb)
+                    out_res = _run_python_code(
+                        code,
+                        program_path,
+                        stdin_text,
+                        timeout_used,
+                        memory_limit_mb,
+                        max_output_bytes=max(1024, int(max_output_kb) * 1024),
+                    )
                 elif language == "javascript":
-                    out_res = _run_javascript_code(code, program_path, stdin_text, timeout_used)
+                    out_res = _run_javascript_code(
+                        code,
+                        program_path,
+                        stdin_text,
+                        timeout_used,
+                        max_output_bytes=max(1024, int(max_output_kb) * 1024),
+                    )
                 elif language == "java":
-                    out_res = _run_java_code(code, program_path, stdin_text, timeout_used)
+                    out_res = _run_java_code(
+                        code,
+                        program_path,
+                        stdin_text,
+                        timeout_used,
+                        max_output_bytes=max(1024, int(max_output_kb) * 1024),
+                    )
                 else:
                     raise ValueError(f"Unsupported language: {language}")
 

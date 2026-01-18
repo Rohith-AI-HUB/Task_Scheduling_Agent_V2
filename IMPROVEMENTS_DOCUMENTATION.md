@@ -1,12 +1,47 @@
 # Task Scheduling Agent V2 — Improvements & Fixes
 
-**Version:** 2.1  
-**Updated:** 2026-01-18T22:13:25.5106014+05:30  
-**Status:** Phase 5 baseline implemented; additional improvements tracked below
+**Version:** 2.2  
+**Updated:** 2026-01-18T22:23:58.6018138+05:30  
+**Status:** Phase 5 hardened for non-Docker deployment (Render)
 
 ---
 
 ## Change Log (Version-Controlled)
+
+### 2026-01-18T22:23:58.6018138+05:30
+
+- **Issue:** Docker-based isolation is not feasible for the intended deployment path (Render backend, Vercel frontend) and some environments (college-managed servers).
+  - **Current state (before):** Subprocess execution existed, but lacked explicit per-task config validation and output bounding.
+  - **Enhancement:** Strengthen the non-Docker sandbox: best-effort resource limits, strict test-case config, and robust stdout/stderr bounding.
+  - **Action taken:** Implemented output-limited runners, safer resource handling on all OS, and a typed `evaluation_config` on tasks.
+  - **Rationale:** Reduces risk of runaway output/memory usage and makes evaluation behavior predictable and auditable.
+
+- **Issue:** Python wrapper imported `resource` unconditionally, which breaks on non-POSIX environments.
+  - **Current state (before):** Running the Python runner on Windows could fail due to `ImportError: resource`.
+  - **Enhancement:** Make resource limits best-effort and OS-safe.
+  - **Action taken:** Guarded `resource` import inside the wrapper and kept timeout/output caps platform-independent.
+  - **Files:** [code_runner.py](file:///C:/Users/rohit/Documents/PYTHON/Task_Scheduling_Agent_V2/backend/app/ai/evaluator/code_runner.py)
+
+- **Issue:** Unbounded subprocess output can exhaust server memory on large prints.
+  - **Current state (before):** `capture_output=True` buffered all output in memory.
+  - **Enhancement:** Enforce a maximum stdout/stderr size per run.
+  - **Action taken:** Added an output-capped runner implementation used by Python/JS/Java execution paths.
+  - **Files:** [code_runner.py](file:///C:/Users/rohit/Documents/PYTHON/Task_Scheduling_Agent_V2/backend/app/ai/evaluator/code_runner.py)
+
+- **Issue:** Test cases and evaluation settings were untyped, allowing invalid configs to reach runtime.
+  - **Current state (before):** `evaluation_config` was a free-form dict in Mongo.
+  - **Enhancement:** Add explicit test-case configuration with schema validation.
+  - **Action taken:** Added `TaskEvaluationConfig` + `CodeEvaluationConfig` + `CodeTestCase` models and wired them into task create/update responses.
+  - **Files:** [task.py](file:///C:/Users/rohit/Documents/PYTHON/Task_Scheduling_Agent_V2/backend/app/models/task.py), [tasks.py](file:///C:/Users/rohit/Documents/PYTHON/Task_Scheduling_Agent_V2/backend/app/api/tasks.py)
+
+- **Issue:** No automated regression tests for sandbox runner behaviors.
+  - **Current state (before):** Runner behavior changes were not covered by unit tests.
+  - **Enhancement:** Add tests for normalized comparisons, output caps, and security blocking.
+  - **Action taken:** Added a focused test suite for the code runner.
+  - **Files:** [test_code_runner.py](file:///C:/Users/rohit/Documents/PYTHON/Task_Scheduling_Agent_V2/backend/tests/test_code_runner.py)
+
+- **Verification (post-change):**
+  - Backend: `python -m pytest` (16 passed)
 
 ### 2026-01-18T22:13:25.5106014+05:30
 
@@ -60,7 +95,7 @@ Phase 5 (AI Evaluation Engine) is implemented as a baseline that supports:
 - Teacher dashboard indicators and result viewer
 - Lightweight progress polling endpoint
 
-The baseline intentionally prioritizes safe defaults and clear API contracts. Advanced sandboxing and richer document analysis remain planned.
+The baseline intentionally prioritizes safe defaults and clear API contracts for Render-style deployments where Docker may not be available.
 
 ---
 
@@ -110,8 +145,10 @@ The baseline intentionally prioritizes safe defaults and clear API contracts. Ad
 - **Evaluation execution**
   - Trigger: teacher endpoint calls a queue function which schedules evaluation work on the server event loop
   - Service: [submission_service.py](file:///C:/Users/rohit/Documents/PYTHON/Task_Scheduling_Agent_V2/backend/app/services/submission_service.py)
-  - Code runner: Python-only baseline via subprocess (isolated mode `-I`)
+  - Code runner: Subprocess runner (isolated mode `-I`) with output caps and best-effort resource limits
     - File: [code_runner.py](file:///C:/Users/rohit/Documents/PYTHON/Task_Scheduling_Agent_V2/backend/app/ai/evaluator/code_runner.py)
+  - Task-level configuration: typed `evaluation_config` stored on tasks
+    - Model: [TaskEvaluationConfig](file:///C:/Users/rohit/Documents/PYTHON/Task_Scheduling_Agent_V2/backend/app/models/task.py)
   - Document analyzer: word count + keyword match; optional PDF extraction if `pypdf` or `PyPDF2` installed
     - File: [doc_analyzer.py](file:///C:/Users/rohit/Documents/PYTHON/Task_Scheduling_Agent_V2/backend/app/ai/evaluator/doc_analyzer.py)
   - Feedback generator: formats a basic AI feedback string
@@ -142,12 +179,14 @@ The baseline intentionally prioritizes safe defaults and clear API contracts. Ad
 ### Implemented
 
 - Python subprocess execution uses isolated mode (`python -I`) and runs in a temporary directory.
+- Output caps (stdout/stderr) for all subprocess runners to prevent memory exhaustion.
+- Best-effort OS-aware resource limiting: enforced on POSIX when available; timeouts/output caps always apply.
+- Optional security blocking mode based on simple static checks (`security_mode: block`).
 
 ### Planned (Recommended)
 
-- Docker-based sandbox (no network, read-only FS, CPU/memory constraints)
-- Resource limits for subprocess execution on all OS targets
-- Explicit test-case configuration + strict input/output handling
+- Strong sandboxing (network namespace, read-only FS, seccomp/AppArmor) requires containers/OS controls and may not be feasible on all hosts.
+- If Docker becomes available in a controlled environment, use containerized runners with: no network, read-only FS, and CPU/memory limits.
 
 ---
 
@@ -180,9 +219,8 @@ Latest verification is recorded in the Change Log entry above.
 
 ### Code evaluation
 
-- Add JavaScript and Java execution (with sandboxing)
-- Support richer test comparisons (normalized/regex/contains) and partial credit
-- Add configurable time/memory limits per task
+- Strengthen isolation for non-Docker hosts (separate user, tighter filesystem permissions, restricted syscalls where possible).
+- Add Docker-based runners if deployment policy permits (optional).
 
 ### Document analysis
 

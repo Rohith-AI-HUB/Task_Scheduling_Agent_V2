@@ -86,9 +86,11 @@ async def evaluate_submission(*, submission_id: ObjectId, retry_count: int = 0) 
             language = str(code_cfg.get("language") or "python").lower()
             timeout_ms = int(code_cfg.get("timeout_ms") or 2000)
             memory_limit_mb = int(code_cfg.get("memory_limit_mb") or 256)
+            max_output_kb = int(code_cfg.get("max_output_kb") or 64)
             test_cases = code_cfg.get("test_cases")
             test_cases_list = test_cases if isinstance(test_cases, list) else None
             enable_quality_checks = bool(code_cfg.get("enable_quality_checks", True))
+            security_mode = str(code_cfg.get("security_mode") or "warn").lower()
 
             code_results = run_code_tests(
                 code=str(submission.get("content") or ""),
@@ -96,7 +98,9 @@ async def evaluate_submission(*, submission_id: ObjectId, retry_count: int = 0) 
                 test_cases=test_cases_list,
                 timeout_ms=timeout_ms,
                 memory_limit_mb=memory_limit_mb,
+                max_output_kb=max_output_kb,
                 enable_quality_checks=enable_quality_checks,
+                security_mode="block" if security_mode == "block" else "warn",
             )
 
         # DOCUMENT ANALYSIS with enhanced features
