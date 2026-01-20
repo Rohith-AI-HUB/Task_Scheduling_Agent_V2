@@ -20,6 +20,17 @@ class Settings(BaseSettings):
     uploads_dir: str = Field(default="uploads", alias="UPLOADS_DIR")
     max_upload_bytes: int = Field(default=25 * 1024 * 1024, alias="MAX_UPLOAD_BYTES")
 
+    # Groq API Configuration
+    groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
+    groq_enable_routing: bool = Field(default=True, alias="GROQ_ENABLE_ROUTING")
+    groq_enable_guards: bool = Field(default=True, alias="GROQ_ENABLE_GUARDS")
+    groq_enable_caching: bool = Field(default=True, alias="GROQ_ENABLE_CACHING")
+    groq_cache_ttl_seconds: int = Field(default=3600, alias="GROQ_CACHE_TTL_SECONDS")
+
+    # Redis Configuration (for Groq quota tracking and caching)
+    redis_url: str = Field(default="redis://localhost:6379", alias="REDIS_URL")
+    redis_db: int = Field(default=0, alias="REDIS_DB")
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

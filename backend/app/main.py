@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
-from app.api import auth, subjects, tasks, submissions, groups, extensions, ai_assistant, dashboard, profile_pictures
+from app.api import auth, subjects, tasks, submissions, groups, extensions, ai_assistant, dashboard, profile_pictures, groq_stats
 from app.config import settings
 from app.database.connection import close_mongo_connection, connect_to_mongo, ensure_mongo_indexes
 from app.utils.firebase_verify import initialize_firebase
@@ -49,6 +49,7 @@ app.include_router(extensions.router, prefix="/api/extensions", tags=["extension
 app.include_router(ai_assistant.router, prefix="/api/ai", tags=["ai"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(profile_pictures.router, prefix="/api/profile-pictures", tags=["profile_pictures"])
+app.include_router(groq_stats.router, prefix="/api/groq", tags=["groq"])
 
 
 @app.get("/health")
