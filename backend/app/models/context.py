@@ -35,9 +35,17 @@ class ScheduledTask(BaseModel):
     task: TaskResponse
     priority: float = Field(ge=0)
     band: PriorityBand
+    explanation: Optional[str] = Field(
+        default=None,
+        description="AI-generated explanation for why this task has this priority"
+    )
 
 
 class AIScheduleResponse(BaseModel):
     generated_at: datetime
     tasks: list[ScheduledTask] = Field(default_factory=list)
+    has_explanations: bool = Field(
+        default=False,
+        description="Whether AI explanations are included"
+    )
 

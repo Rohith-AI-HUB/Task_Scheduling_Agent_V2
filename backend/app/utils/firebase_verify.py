@@ -3,32 +3,68 @@ from firebase_admin import auth, credentials
 from fastapi import HTTPException, status
 from app.config import settings
 import os
+import json
+import base64
+import tempfile
 
 # Initialize Firebase Admin SDK
 _firebase_app = None
 
 
 def initialize_firebase():
-    """Initialize Firebase Admin SDK"""
+    """Initialize Firebase Admin SDK
+
+    Supports two methods for loading credentials:
+    1. Base64 encoded JSON (for production/cloud platforms)
+    2. File path (for local development)
+    """
     global _firebase_app
 
     if _firebase_app is not None:
         return _firebase_app
 
     try:
-        # Check if credentials file exists
-        cred_path = os.path.join(os.path.dirname(__file__), "..", "..", "firebase-credentials.json")
+        cred = None
 
-        if not os.path.exists(cred_path):
-            # Try alternative path
-            cred_path = os.path.join(os.getcwd(), "firebase-credentials.json")
+        # Method 1: Try base64 encoded credentials (production)
+        if settings.firebase_credentials_base64:
+            try:
+                # Decode base64 credentials
+                cred_json = base64.b64decode(settings.firebase_credentials_base64).decode('utf-8')
+                cred_dict = json.loads(cred_json)
+                cred = credentials.Certificate(cred_dict)
+                print("✅ Firebase credentials loaded from base64 environment variable")
+            except Exception as e:
+                print(f"⚠️ Failed to load base64 credentials: {e}")
 
-        if not os.path.exists(cred_path):
+        # Method 2: Try file path (development)
+        if cred is None:
+            # Check configured path first
+            cred_path = settings.firebase_credentials_path
+
+            if cred_path and os.path.exists(cred_path):
+                cred = credentials.Certificate(cred_path)
+                print(f"✅ Firebase credentials loaded from: {cred_path}")
+            else:
+                # Try default locations
+                default_paths = [
+                    os.path.join(os.path.dirname(__file__), "..", "..", "firebase-credentials.json"),
+                    os.path.join(os.getcwd(), "firebase-credentials.json"),
+                    "./firebase-credentials.json"
+                ]
+
+                for path in default_paths:
+                    if os.path.exists(path):
+                        cred = credentials.Certificate(path)
+                        print(f"✅ Firebase credentials loaded from: {path}")
+                        break
+
+        if cred is None:
             raise FileNotFoundError(
-                f"Firebase credentials file not found. Please place 'firebase-credentials.json' in the backend directory."
+                "Firebase credentials not found. Please set FIREBASE_CREDENTIALS_BASE64 "
+                "or place 'firebase-credentials.json' in the backend directory."
             )
 
-        cred = credentials.Certificate(cred_path)
         _firebase_app = firebase_admin.initialize_app(cred)
         print("✅ Firebase Admin SDK initialized successfully")
         return _firebase_app

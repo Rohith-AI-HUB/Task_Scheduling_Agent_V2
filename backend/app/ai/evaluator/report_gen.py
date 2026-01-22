@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
+import logging
+from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 
 def _get_score_category(score: int) -> str:
@@ -203,3 +206,155 @@ def build_ai_feedback(
         sections.extend(recommendations)
 
     return "\n".join(sections).strip()
+
+
+async def build_ai_feedback_with_groq(
+    *,
+    user_uid: str,
+    code: str,
+    language: str,
+    code_results: dict[str, Any],
+    document_metrics: dict[str, Any],
+    task_description: str,
+    ai_score: int | None,
+) -> str:
+    """
+    Generate comprehensive AI feedback using Groq for intelligent insights.
+
+    This function first generates the rule-based feedback, then enhances it
+    with Groq-powered analysis for code submissions.
+
+    Args:
+        user_uid: Student's user ID (for rate limiting)
+        code: The submitted code
+        language: Programming language
+        code_results: Code evaluation results with test cases, errors, warnings
+        document_metrics: Document analysis metrics
+        task_description: The assignment description
+        ai_score: Overall AI score (0-100)
+
+    Returns:
+        Enhanced feedback string with AI insights
+    """
+    # Start with rule-based feedback
+    base_feedback = build_ai_feedback(
+        code_results=code_results,
+        document_metrics=document_metrics,
+        ai_score=ai_score
+    )
+
+    # Only use Groq for code feedback if we have code results
+    if not code_results or code_results.get("passed", 0) + code_results.get("failed", 0) == 0:
+        return base_feedback
+
+    try:
+        from app.services.groq_service import groq_service
+
+        if not groq_service.is_available():
+            logger.debug("Groq not available, using rule-based feedback only")
+            return base_feedback
+
+        # Prepare test results for Groq
+        test_results = []
+        test_details = code_results.get("test_details", [])
+
+        for i, detail in enumerate(test_details[:5]):  # Limit to 5 test cases
+            test_results.append({
+                "test_number": i + 1,
+                "passed": detail.get("passed", False),
+                "input": str(detail.get("input", ""))[:100],
+                "expected": str(detail.get("expected_output", ""))[:100],
+                "actual": str(detail.get("actual_output", ""))[:100],
+                "error": detail.get("error")
+            })
+
+        # Get security issues from warnings
+        security_issues = [
+            w for w in code_results.get("warnings", [])
+            if any(keyword in w.lower() for keyword in ["security", "unsafe", "dangerous", "eval", "exec"])
+        ]
+
+        # Generate Groq feedback
+        groq_feedback = await groq_service.generate_code_feedback(
+            user_uid=user_uid,
+            code=code,
+            language=language,
+            test_results=test_results,
+            task_description=task_description,
+            security_issues=security_issues
+        )
+
+        # Combine feedbacks
+        enhanced_feedback = base_feedback
+
+        if groq_feedback and groq_feedback != base_feedback:
+            enhanced_feedback += "\n\n" + "=" * 50
+            enhanced_feedback += "\nAI INSIGHTS"
+            enhanced_feedback += "\n" + "=" * 50 + "\n"
+            enhanced_feedback += groq_feedback
+
+        return enhanced_feedback
+
+    except Exception as e:
+        logger.warning(f"Failed to get Groq feedback: {e}")
+        return base_feedback
+
+
+def preprocess_code_for_feedback(
+    code: str,
+    language: str,
+    code_results: dict[str, Any],
+    task_description: str = ""
+) -> dict[str, Any]:
+    """
+    Preprocess code evaluation data for Groq feedback.
+
+    This extracts and structures the relevant information
+    to minimize the Groq prompt size.
+
+    Args:
+        code: The submitted code
+        language: Programming language
+        code_results: Raw code evaluation results
+        task_description: Assignment description
+
+    Returns:
+        Preprocessed data dict ready for Groq
+    """
+    # Truncate code
+    code_snippet = code[:2000] if len(code) > 2000 else code
+
+    # Extract test results
+    test_results = []
+    test_details = code_results.get("test_details", [])
+
+    for i, detail in enumerate(test_details[:5]):
+        test_results.append({
+            "test_number": i + 1,
+            "passed": detail.get("passed", False),
+            "input": str(detail.get("input", ""))[:100],
+            "expected": str(detail.get("expected_output", ""))[:100],
+            "actual": str(detail.get("actual_output", ""))[:100],
+            "error": detail.get("error")
+        })
+
+    # Counts
+    passed_count = int(code_results.get("passed") or 0)
+    failed_count = int(code_results.get("failed") or 0)
+    total_count = passed_count + failed_count
+
+    # Security issues
+    security_issues = [
+        w for w in code_results.get("warnings", [])
+        if any(keyword in w.lower() for keyword in ["security", "unsafe", "dangerous", "eval", "exec"])
+    ]
+
+    return {
+        "code_snippet": code_snippet,
+        "language": language,
+        "test_results": test_results,
+        "passed_count": passed_count,
+        "total_count": total_count,
+        "security_issues": security_issues,
+        "task_description": task_description[:500] if task_description else ""
+    }

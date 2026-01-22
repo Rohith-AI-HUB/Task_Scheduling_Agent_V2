@@ -1,0 +1,33 @@
+[Unit]
+Description=Task Scheduling Agent V2 API
+After=network.target
+
+[Service]
+Type=simple
+User=taskagent
+Group=taskagent
+WorkingDirectory=/opt/taskagent
+Environment="PATH=/opt/taskagent/venv/bin"
+EnvironmentFile=/opt/taskagent/.env
+ExecStart=/opt/taskagent/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/taskagent/uploads
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=4096
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=taskagent
+
+[Install]
+WantedBy=multi-user.target

@@ -258,3 +258,153 @@ def extract_text_from_pdf(path: str | Path) -> str:
         return "\n\n".join(chunks)
     except Exception as e:
         raise RuntimeError(f"Failed to extract text from PDF: {e}") from e
+
+
+async def analyze_text_with_groq(
+    *,
+    user_uid: str,
+    text: str,
+    keywords: list[str] | None = None,
+    min_words: int = 0,
+    task_title: str = "",
+    task_description: str = "",
+    reference_texts: list[str] | None = None,
+    enable_readability: bool = True,
+    enable_plagiarism: bool = False,
+    enable_structure: bool = True,
+) -> dict[str, Any]:
+    """
+    Comprehensive text analysis with Groq AI enhancement.
+
+    First performs rule-based analysis, then enhances with Groq insights.
+
+    Args:
+        user_uid: Student's user ID (for rate limiting)
+        text: The text to analyze
+        keywords: List of keywords to search for
+        min_words: Minimum expected word count
+        task_title: Assignment title
+        task_description: Assignment description
+        reference_texts: Reference texts for plagiarism detection
+        enable_readability: Calculate readability metrics
+        enable_plagiarism: Check for plagiarism
+        enable_structure: Analyze document structure
+
+    Returns:
+        Dictionary with analysis results including Groq insights
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # First, run rule-based analysis
+    base_result = analyze_text(
+        text=text,
+        keywords=keywords,
+        min_words=min_words,
+        reference_texts=reference_texts,
+        enable_readability=enable_readability,
+        enable_plagiarism=enable_plagiarism,
+        enable_structure=enable_structure,
+    )
+
+    # Try to enhance with Groq
+    try:
+        from app.services.groq_service import groq_service
+
+        if not groq_service.is_available():
+            logger.debug("Groq not available, using rule-based analysis only")
+            return base_result
+
+        # Prepare data for Groq
+        found_keywords = base_result.get("keywords_found", [])
+        keyword_list = [k.strip() for k in (keywords or []) if isinstance(k, str) and k.strip()]
+        missing_keywords = [k for k in keyword_list if k not in found_keywords]
+
+        readability = {
+            "flesch_score": base_result.get("readability_score", 0),
+            "grade_level": base_result.get("grade_level", 0)
+        }
+
+        # Call Groq for analysis
+        groq_result = await groq_service.analyze_document(
+            user_uid=user_uid,
+            content=text,
+            word_count=base_result.get("word_count", 0),
+            required_keywords=keyword_list,
+            found_keywords=found_keywords,
+            missing_keywords=missing_keywords,
+            readability=readability,
+            task_title=task_title,
+            task_description=task_description,
+            min_words=min_words
+        )
+
+        # Merge Groq results with base results
+        base_result["groq_analysis"] = {
+            "quality_assessment": groq_result.get("quality_assessment", ""),
+            "structure_feedback": groq_result.get("structure_feedback", ""),
+            "improvements": groq_result.get("improvements", []),
+            "suggested_score": groq_result.get("suggested_score"),
+            "raw_response": groq_result.get("raw_response", "")
+        }
+
+        # Use Groq's suggested score if available
+        if groq_result.get("suggested_score") is not None:
+            base_result["groq_suggested_score"] = groq_result["suggested_score"]
+
+        return base_result
+
+    except Exception as e:
+        logger.warning(f"Failed to get Groq analysis: {e}")
+        return base_result
+
+
+def preprocess_document_for_groq(
+    text: str,
+    keywords: list[str] | None,
+    base_metrics: dict[str, Any],
+    task_title: str = "",
+    task_description: str = "",
+    min_words: int = 0
+) -> dict[str, Any]:
+    """
+    Preprocess document data for Groq analysis.
+
+    This extracts and structures the relevant information
+    to minimize the Groq prompt size.
+
+    Args:
+        text: The submission text
+        keywords: Required keywords
+        base_metrics: Results from rule-based analyze_text()
+        task_title: Assignment title
+        task_description: Assignment description
+        min_words: Minimum word requirement
+
+    Returns:
+        Preprocessed data dict ready for Groq
+    """
+    # Truncate content preview
+    content_preview = text[:3000] if len(text) > 3000 else text
+
+    # Process keywords
+    keyword_list = [k.strip() for k in (keywords or []) if isinstance(k, str) and k.strip()]
+    found_keywords = base_metrics.get("keywords_found", [])
+    missing_keywords = [k for k in keyword_list if k not in found_keywords]
+
+    return {
+        "content_preview": content_preview,
+        "word_count": base_metrics.get("word_count", 0),
+        "required_keywords": keyword_list,
+        "found_keywords": found_keywords,
+        "missing_keywords": missing_keywords,
+        "readability": {
+            "flesch_score": base_metrics.get("readability_score", 0),
+            "grade_level": base_metrics.get("grade_level", 0)
+        },
+        "task_requirements": {
+            "title": task_title,
+            "description": task_description[:500] if task_description else "",
+            "min_words": min_words
+        }
+    }
