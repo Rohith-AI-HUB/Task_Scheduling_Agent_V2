@@ -18,6 +18,10 @@ def get_db() -> AsyncIOMotorDatabase:
     return get_client()[settings.mongodb_db_name]
 
 
+def get_database() -> AsyncIOMotorDatabase:
+    return get_db()
+
+
 async def connect_to_mongo() -> None:
     global _client
     if _client is not None:
