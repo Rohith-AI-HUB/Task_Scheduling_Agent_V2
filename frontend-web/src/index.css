@@ -51,6 +51,7 @@ body {
   word-wrap: normal;
   direction: ltr;
   -webkit-font-feature-settings: 'liga';
+  font-feature-settings: 'liga';
   -webkit-font-smoothing: antialiased;
 }
 
@@ -79,4 +80,10 @@ body {
 
 .dark ::-webkit-scrollbar-thumb:hover {
   background: #64748b;
+}
+
+@layer components {
+  .bento-card {
+    @apply bg-white dark:bg-slate-900 rounded-bento shadow-sm border border-slate-200/60 dark:border-slate-800 transition-all hover:shadow-md;
+  }
 }

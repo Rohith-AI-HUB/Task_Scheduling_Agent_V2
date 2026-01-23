@@ -4,7 +4,7 @@ Manages deadline extension requests with AI workload analysis
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -151,7 +151,17 @@ class ExtensionService:
             raise ValueError("Extension request already pending for this task")
 
         # Calculate extension days
-        extension_days = (request_data.requested_deadline - current_deadline).days
+        # Handle timezone awareness to avoid "can't subtract offset-naive and offset-aware datetimes"
+        req_deadline = request_data.requested_deadline
+        curr_deadline = current_deadline
+
+        if req_deadline.tzinfo is None:
+            req_deadline = req_deadline.replace(tzinfo=timezone.utc)
+        
+        if curr_deadline.tzinfo is None:
+            curr_deadline = curr_deadline.replace(tzinfo=timezone.utc)
+
+        extension_days = (req_deadline - curr_deadline).days
 
         if extension_days <= 0:
             raise ValueError("Requested deadline must be after current deadline")

@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Teacher Dashboard - Bento Grid Variant 1</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#6D28D9",
+                        "soft-purple": "#EDE9FE",
+                        "accent-purple": "#7C3AED",
+                        "surface": "#F3F4F6",
+                    },
+                    fontFamily: {
+                        sans: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        'bento': "16px",
+                    },
+                },
+            },
+        };
+    </script>
+<style type="text/tailwindcss">
+        @layer base {
+            body {
+                @apply bg-surface text-slate-900 font-sans antialiased;
+            }
+        }
+        .bento-card {
+            @apply bg-white dark:bg-slate-900 rounded-bento shadow-sm border border-slate-200/60 dark:border-slate-800 transition-all hover:shadow-md;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        ::-webkit-scrollbar {
+            height: 6px;
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            @apply bg-slate-200 dark:bg-slate-700 rounded-full;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+<nav class="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-md dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 px-6 py-3 flex items-center justify-between">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-2">
+<div class="bg-primary p-1.5 rounded-lg text-white">
+<span class="material-symbols-outlined block">bolt</span>
+</div>
+<span class="font-bold text-lg tracking-tight">Task Scheduling Agent</span>
+</div>
+<div class="hidden lg:flex items-center gap-4 text-sm font-medium text-slate-600 dark:text-slate-400">
+<a class="text-primary" href="#">Dashboard</a>
+<a class="hover:text-primary" href="#">Classrooms</a>
+<a class="hover:text-primary" href="#">Schedule</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative hidden sm:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+<input class="w-64 pl-9 pr-4 py-1.5 bg-slate-100 dark:bg-slate-800 border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20" placeholder="Search resources..." type="text"/>
+</div>
+<div class="flex items-center gap-3">
+<button class="w-10 h-10 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<div class="w-9 h-9 rounded-full bg-slate-200 overflow-hidden border-2 border-white shadow-sm">
+<img alt="User avatar" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAfOFoCZl41Hbqo20hKsXf0IGs8NgbXNLQci1fdrnHk3crLmS1KdSTsbd9-BTlTRpOM853GlJgsq4JrK8zv4FuNX77hJKm8ibLFNQ024iTLX97S1aR2LFzPzNOgrG84zwtBwFbbcUXLnZ9oRSpwt1mQhLEsuYlGwImHbMP_D7g-IkHOSFpseXgUlger1qEmckBJj5kYR0pCwYZl3fQFU_fOUsv9Nuthi49fnvVuTu4nZE355GsNp7Lak-F02WSb0waeENjXW5IG4w8T"/>
+</div>
+</div>
+</div>
+</nav>
+<main class="max-w-[1440px] mx-auto p-6">
+<div class="grid grid-cols-12 grid-rows-6 gap-6 h-auto lg:h-[calc(100vh-140px)] min-h-[850px]">
+<div class="col-span-12 lg:col-span-8 row-span-2 bento-card p-8 bg-gradient-to-br from-white to-soft-purple/30 flex flex-col justify-between">
+<div>
+<span class="text-primary font-semibold text-sm bg-primary/10 px-3 py-1 rounded-full uppercase tracking-wider">Academic Portal</span>
+<h1 class="text-4xl font-bold text-slate-900 dark:text-white mt-4">Welcome back,<br/>Rohit Adi</h1>
+<p class="text-slate-500 mt-2 max-w-md">You have 4 classes today and 3 pending extension requests that need your immediate attention.</p>
+</div>
+<div class="flex gap-4 mt-6">
+<button class="bg-primary text-white px-6 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-accent-purple transition-all shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined">add_circle</span>
+                        Quick Action
+                    </button>
+<button class="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-6 py-3 rounded-xl font-semibold hover:bg-slate-50 transition-all">
+                        View Schedule
+                    </button>
+</div>
+</div>
+<div class="col-span-12 md:col-span-6 lg:col-span-4 row-span-4 bento-card p-6 bg-primary dark:bg-primary relative overflow-hidden group flex flex-col">
+<div class="absolute -right-8 -bottom-8 opacity-10 group-hover:scale-110 transition-transform duration-500 pointer-events-none">
+<span class="material-symbols-outlined text-[160px] text-white">smart_toy</span>
+</div>
+<div class="relative z-10 flex justify-between items-center mb-6 border-b border-white/10 pb-4 shrink-0">
+<div class="flex items-center gap-3">
+<div class="bg-white/20 p-2 rounded-lg text-white">
+<span class="material-symbols-outlined">chat_bubble</span>
+</div>
+<div>
+<h3 class="text-white font-bold text-lg leading-tight">AI Assistant</h3>
+<span class="text-white/60 text-xs font-medium uppercase tracking-widest">Always Active</span>
+</div>
+</div>
+<button class="text-white/70 hover:text-white transition-colors">
+<span class="material-symbols-outlined">more_horiz</span>
+</button>
+</div>
+<div class="relative z-10 flex-1 overflow-y-auto space-y-4 pr-1 mb-4 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
+<div class="flex gap-3">
+<div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0 mt-1">
+<span class="material-symbols-outlined text-sm text-white">smart_toy</span>
+</div>
+<div class="bg-white/10 p-3 rounded-2xl rounded-tl-none text-white text-sm backdrop-blur-sm shadow-sm">
+                Good morning, Rohit! You have 3 extension requests pending. Would you like me to draft responses based on the students' history?
+            </div>
+</div>
+<div class="flex gap-3 flex-row-reverse">
+<div class="bg-white text-primary p-3 rounded-2xl rounded-tr-none text-sm font-medium shadow-sm">
+                 Yes, please highlight the ones with medical certificates first.
+             </div>
+</div>
+<div class="flex gap-3">
+<div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0 mt-1">
+<span class="material-symbols-outlined text-sm text-white">smart_toy</span>
+</div>
+<div class="bg-white/10 p-3 rounded-2xl rounded-tl-none text-white text-sm backdrop-blur-sm shadow-sm">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-xs animate-spin">sync</span>
+<span class="text-xs opacity-70">Processing...</span>
+</div>
+                 Checking Sarah Jenkins' attachment...
+             </div>
+</div>
+</div>
+<div class="relative z-10 mt-auto pt-2 shrink-0">
+<div class="relative flex items-center gap-2">
+<input class="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/50 focus:ring-2 focus:ring-white/30 focus:border-transparent transition-all backdrop-blur-md shadow-lg" placeholder="Type a message..." type="text"/>
+<button class="absolute right-2 top-1/2 -translate-y-1/2 bg-white text-primary p-1.5 rounded-lg hover:bg-white/90 transition-colors shadow-sm">
+<span class="material-symbols-outlined text-xl">send</span>
+</button>
+</div>
+</div>
+</div>
+<div class="col-span-12 md:col-span-6 lg:col-span-4 row-span-2 bento-card overflow-hidden flex flex-col">
+<div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
+<h3 class="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">event_note</span>
+                        Upcoming
+                    </h3>
+<span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">14 Days</span>
+</div>
+<div class="flex-1 overflow-y-auto p-4 space-y-3">
+<div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+<span class="material-symbols-outlined text-lg">assignment</span>
+</div>
+<div>
+<h4 class="font-semibold text-sm leading-tight">Weekly Quiz</h4>
+<p class="text-[11px] text-slate-500">Calculus • 45 Students</p>
+</div>
+</div>
+<div class="text-right shrink-0">
+<span class="text-[10px] font-bold text-red-500 bg-red-50 px-2 py-1 rounded">2 Days</span>
+</div>
+</div>
+<div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+<span class="material-symbols-outlined text-lg">lab_panel</span>
+</div>
+<div>
+<h4 class="font-semibold text-sm leading-tight">Lab Report</h4>
+<p class="text-[11px] text-slate-500">Physics II • 32 Students</p>
+</div>
+</div>
+<div class="text-right shrink-0">
+<span class="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">5 Days</span>
+</div>
+</div>
+</div>
+</div>
+<div class="col-span-12 md:col-span-6 lg:col-span-4 row-span-2 bento-card p-8 bg-slate-900 dark:bg-black text-white flex flex-col justify-between">
+<div>
+<h3 class="text-xl font-bold">Pending Tasks</h3>
+<p class="text-slate-400 text-sm mt-1">Assignments awaiting grading</p>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-6xl font-black text-primary">24</span>
+<span class="text-slate-500 font-medium">submissions</span>
+</div>
+<div class="w-full bg-slate-800 rounded-full h-2">
+<div class="bg-primary h-2 rounded-full w-3/4"></div>
+</div>
+<button class="w-full py-2.5 rounded-lg border border-slate-700 text-sm font-semibold hover:bg-slate-800 transition-colors">
+                    Review All
+                </button>
+</div>
+<div class="col-span-12 lg:col-span-6 row-span-2 bento-card p-6 flex flex-col">
+<div class="flex justify-between items-center mb-4">
+<h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">school</span>
+                        Your Classrooms
+                    </h3>
+<button class="text-primary text-sm font-bold hover:underline">View All</button>
+</div>
+<div class="flex-1 flex gap-4 overflow-x-auto pb-2 scroll-smooth">
+<div class="min-w-[260px] bg-slate-50 dark:bg-slate-800 rounded-xl p-5 border border-slate-100 dark:border-slate-700 flex flex-col justify-between">
+<div>
+<div class="flex justify-between items-start mb-2">
+<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary uppercase">CS-101</span>
+<span class="material-symbols-outlined text-slate-300">more_vert</span>
+</div>
+<h4 class="font-bold text-slate-800 dark:text-white">Computer Science</h4>
+<p class="text-xs text-slate-500 mt-1">Intro to Algorithms</p>
+</div>
+<div class="mt-6 flex items-center justify-between">
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full bg-slate-200 border-2 border-white"></div>
+<div class="w-6 h-6 rounded-full bg-slate-300 border-2 border-white"></div>
+<div class="w-6 h-6 rounded-full bg-slate-400 border-2 border-white"></div>
+<div class="w-6 h-6 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[8px] font-bold">+24</div>
+</div>
+<button class="text-primary font-bold text-xs">JOIN CODE: <span class="font-mono">XK92</span></button>
+</div>
+</div>
+<div class="min-w-[260px] bg-slate-50 dark:bg-slate-800 rounded-xl p-5 border border-slate-100 dark:border-slate-700 flex flex-col justify-between">
+<div>
+<div class="flex justify-between items-start mb-2">
+<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 uppercase">MAT-302</span>
+<span class="material-symbols-outlined text-slate-300">more_vert</span>
+</div>
+<h4 class="font-bold text-slate-800 dark:text-white">Advanced Calculus</h4>
+<p class="text-xs text-slate-500 mt-1">Multivariable Analysis</p>
+</div>
+<div class="mt-6 flex items-center justify-between">
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full bg-slate-200 border-2 border-white"></div>
+<div class="w-6 h-6 rounded-full bg-slate-300 border-2 border-white"></div>
+<div class="w-6 h-6 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[8px] font-bold">+12</div>
+</div>
+<button class="text-primary font-bold text-xs">JOIN CODE: <span class="font-mono">MATH2</span></button>
+</div>
+</div>
+<div class="min-w-[180px] border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl flex flex-col items-center justify-center p-5 cursor-pointer hover:bg-slate-50 transition-colors group">
+<div class="w-10 h-10 rounded-full bg-slate-100 group-hover:bg-primary/10 flex items-center justify-center text-slate-400 group-hover:text-primary mb-2 transition-all">
+<span class="material-symbols-outlined">add</span>
+</div>
+<span class="text-sm font-semibold text-slate-500 group-hover:text-primary">Add New</span>
+</div>
+</div>
+</div>
+<div class="col-span-6 md:col-span-3 lg:col-span-2 row-span-2 space-y-6">
+<div class="h-[calc(50%-12px)] bento-card p-6 flex flex-col justify-center items-center text-center">
+<div class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-2">
+<span class="material-symbols-outlined text-2xl">book</span>
+</div>
+<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Subjects</p>
+<h3 class="text-2xl font-bold mt-1">12</h3>
+</div>
+<div class="h-[calc(50%-12px)] bento-card p-6 flex flex-col justify-center items-center text-center">
+<div class="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center mb-2">
+<span class="material-symbols-outlined text-2xl">groups</span>
+</div>
+<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enrolled</p>
+<h3 class="text-2xl font-bold mt-1">458</h3>
+</div>
+</div>
+<div class="col-span-12 lg:col-span-4 row-span-2 bento-card flex flex-col">
+<div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+<h3 class="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+<span class="material-symbols-outlined text-amber-500">history_edu</span>
+                        Extensions
+                    </h3>
+<div class="flex gap-1">
+<span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">3 Active</span>
+</div>
+</div>
+<div class="flex-1 p-4 space-y-4 overflow-y-auto">
+<div class="flex gap-3">
+<div class="w-8 h-8 rounded-full bg-slate-200 shrink-0"></div>
+<div>
+<p class="text-sm font-semibold">Sarah Jenkins <span class="text-slate-400 font-normal">requested 2 days for</span> Assignment 4</p>
+<p class="text-xs text-slate-400 mt-0.5">"Personal health reasons, doctor's note attached"</p>
+<div class="mt-2 flex gap-2">
+<button class="text-[10px] font-bold text-primary bg-primary/10 px-3 py-1 rounded hover:bg-primary/20">APPROVE</button>
+<button class="text-[10px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded hover:bg-slate-200">DENY</button>
+</div>
+</div>
+</div>
+<div class="flex gap-3">
+<div class="w-8 h-8 rounded-full bg-slate-200 shrink-0"></div>
+<div>
+<p class="text-sm font-semibold">Mark Thompson <span class="text-slate-400 font-normal">requested 1 day for</span> Lab Report</p>
+<div class="mt-2 flex gap-2">
+<button class="text-[10px] font-bold text-primary bg-primary/10 px-3 py-1 rounded">APPROVE</button>
+<button class="text-[10px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded">DENY</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

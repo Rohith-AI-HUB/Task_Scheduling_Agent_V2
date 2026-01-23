@@ -1,7 +1,7 @@
 // Task Scheduling Agent V2 - Service Worker
 // Provides offline support and caching for PWA
 
-const CACHE_NAME = 'taskagent-v1';
+const _CACHE_NAME = 'taskagent-v1';
 const STATIC_CACHE = 'taskagent-static-v1';
 const DYNAMIC_CACHE = 'taskagent-dynamic-v1';
 

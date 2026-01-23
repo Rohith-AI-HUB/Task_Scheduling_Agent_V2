@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import aiService from '../services/aiService';
 import { logout } from '../services/authService';
 import AISchedule from '../components/AISchedule';
 import DueSoon from '../components/DueSoon';
@@ -28,6 +29,10 @@ const StudentDashboard = () => {
   const [joinError, setJoinError] = useState('');
   const [isJoining, setIsJoining] = useState(false);
 
+  const [extensions, setExtensions] = useState([]);
+  const [extLoading, setExtLoading] = useState(true);
+  const [extError, setExtError] = useState('');
+
   const enrolledCount = useMemo(() => subjects.length, [subjects]);
 
   const loadSubjects = async () => {
@@ -43,8 +48,25 @@ const StudentDashboard = () => {
     }
   };
 
+  const loadExtensions = async () => {
+    setExtLoading(true);
+    setExtError('');
+    try {
+      const data = await aiService.getExtensionRequests();
+      setExtensions(data?.items || []);
+    } catch (err) {
+      setExtError(err?.response?.data?.detail || 'Failed to load extension requests');
+    } finally {
+      setExtLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadSubjects();
+  }, []);
+
+  useEffect(() => {
+    loadExtensions();
   }, []);
 
   const handleLogout = async () => {
@@ -69,6 +91,13 @@ const StudentDashboard = () => {
     } finally {
       setIsJoining(false);
     }
+  };
+
+  const formatDateTime = (value) => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString();
   };
 
   return (
@@ -261,6 +290,70 @@ const StudentDashboard = () => {
             <AISchedule />
             <ChatAssistant />
             <DueSoon />
+            <div className="rounded-xl border border-[#d5cee9] bg-white dark:bg-white/5 dark:border-white/10 overflow-hidden">
+              <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-[#d5cee9] dark:border-white/10">
+                <h3 className="flex items-center gap-2 font-bold text-[#110d1c] dark:text-white">
+                  <span className="material-symbols-outlined">hourglass</span>My Extension Requests
+                </h3>
+                <button
+                  className="text-xs font-bold text-primary hover:opacity-80 transition-opacity disabled:opacity-60"
+                  onClick={loadExtensions}
+                  disabled={extLoading}
+                >
+                  Refresh
+                </button>
+              </div>
+              {extError ? (
+                <div className="m-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+                  {extError}
+                </div>
+              ) : extLoading ? (
+                <div className="p-4 text-center text-[#5d479e] dark:text-gray-400 text-sm">Loading...</div>
+              ) : extensions.length === 0 ? (
+                <div className="p-6 text-center">
+                  <span className="material-symbols-outlined text-[#5d479e] dark:text-gray-500 text-[40px] mb-2">task_alt</span>
+                  <p className="text-[#110d1c] dark:text-white font-semibold">No extension requests yet</p>
+                  <p className="text-[#5d479e] dark:text-gray-400 text-sm mt-1">Submit from the task page if needed</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-[#d5cee9] dark:divide-white/10">
+                  {extensions.map((ext) => {
+                    const statusCls =
+                      ext.status === 'approved'
+                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                        : ext.status === 'denied'
+                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                        : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300';
+                    return (
+                      <div key={ext.id} className="p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-bold text-[#110d1c] dark:text-white truncate">{ext.task_title || 'Task'}</h4>
+                            <p className="text-xs text-[#5d479e] dark:text-gray-400 truncate">
+                              Requested: {formatDateTime(ext.requested_deadline)}
+                            </p>
+                          </div>
+                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0 ${statusCls}`}>
+                            {ext.status}
+                          </span>
+                        </div>
+                        <div className="mt-2 text-xs text-[#5d479e] dark:text-gray-400">
+                          <span>
+                            Current: {formatDateTime(ext.current_deadline)}
+                          </span>
+                          {ext.reviewed_at ? (
+                            <span className="ml-2">• Reviewed: {formatDateTime(ext.reviewed_at)}</span>
+                          ) : null}
+                        </div>
+                        {ext.teacher_response ? (
+                          <p className="mt-2 text-xs text-[#110d1c] dark:text-gray-300">{ext.teacher_response}</p>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             <UpcomingTasks />
           </aside>
         </div>

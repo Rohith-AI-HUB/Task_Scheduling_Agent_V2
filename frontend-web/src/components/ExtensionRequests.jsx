@@ -6,11 +6,12 @@ const ExtensionRequests = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [processing, setProcessing] = useState({});
+  const [status, setStatus] = useState('pending');
 
   const loadExtensions = async () => {
     setIsLoading(true);
     try {
-      const data = await aiService.getExtensionRequests('pending');
+      const data = await aiService.getExtensionRequests(status || undefined);
       setExtensions(data.items || []);
       setError('');
     } catch (err) {
@@ -22,7 +23,7 @@ const ExtensionRequests = () => {
 
   useEffect(() => {
     loadExtensions();
-  }, []);
+  }, [status]);
 
   const handleApprove = async (ext) => {
     setProcessing({ [ext.id]: true });
@@ -68,12 +69,26 @@ const ExtensionRequests = () => {
           </div>
           <div>
             <h2 className="text-[#110d1c] dark:text-white text-base font-bold">Extension Requests</h2>
-            <p className="text-[#5d479e] dark:text-slate-400 text-xs">Pending approvals</p>
+            <p className="text-[#5d479e] dark:text-slate-400 text-xs capitalize">{status} requests</p>
           </div>
         </div>
-        <button onClick={loadExtensions} disabled={isLoading} className="size-8 flex items-center justify-center rounded-lg hover:bg-background-light dark:hover:bg-slate-800">
-          <span className="material-symbols-outlined text-[18px]">refresh</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border border-[#eae6f4] dark:border-slate-800 overflow-hidden">
+            {['pending', 'approved', 'denied'].map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatus(s)}
+                className={`px-3 py-1.5 text-xs font-bold capitalize ${status === s ? 'bg-primary text-white' : 'bg-white dark:bg-slate-900 text-[#110d1c] dark:text-white'} transition-colors`}
+                disabled={isLoading}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+          <button onClick={loadExtensions} disabled={isLoading} className="size-8 flex items-center justify-center rounded-lg hover:bg-background-light dark:hover:bg-slate-800">
+            <span className="material-symbols-outlined text-[18px]">refresh</span>
+          </button>
+        </div>
       </div>
 
       <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
@@ -90,8 +105,8 @@ const ExtensionRequests = () => {
         ) : extensions.length === 0 ? (
           <div className="p-6 text-center">
             <span className="material-symbols-outlined text-[#5d479e] dark:text-slate-500 text-[40px] mb-2">done_all</span>
-            <p className="text-[#110d1c] dark:text-white font-semibold">No pending requests</p>
-            <p className="text-[#5d479e] dark:text-slate-400 text-sm mt-1">All extension requests have been reviewed</p>
+            <p className="text-[#110d1c] dark:text-white font-semibold">No {status} requests</p>
+            <p className="text-[#5d479e] dark:text-slate-400 text-sm mt-1">Try a different filter</p>
           </div>
         ) : (
           extensions.map((ext) => (
@@ -101,9 +116,22 @@ const ExtensionRequests = () => {
                   <h3 className="text-[#110d1c] dark:text-white font-semibold text-sm truncate">{ext.task_title}</h3>
                   <p className="text-[#5d479e] dark:text-slate-400 text-xs">{ext.student_name || ext.student_uid}</p>
                 </div>
-                <span className="px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 shrink-0">
-                  {ext.extension_days}d
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300">
+                    {ext.extension_days}d
+                  </span>
+                  <span
+                    className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                      ext.status === 'approved'
+                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                        : ext.status === 'denied'
+                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                        : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'
+                    }`}
+                  >
+                    {ext.status}
+                  </span>
+                </div>
               </div>
 
               <div className="flex items-center gap-2 text-xs text-[#5d479e] dark:text-slate-400 mb-2">
@@ -127,24 +155,30 @@ const ExtensionRequests = () => {
                 </div>
               )}
 
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleApprove(ext)}
-                  disabled={processing[ext.id]}
-                  className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-1"
-                >
-                  <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                  Approve
-                </button>
-                <button
-                  onClick={() => handleDeny(ext)}
-                  disabled={processing[ext.id]}
-                  className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-1"
-                >
-                  <span className="material-symbols-outlined text-[16px]">cancel</span>
-                  Deny
-                </button>
-              </div>
+              {ext.status === 'pending' ? (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleApprove(ext)}
+                    disabled={processing[ext.id]}
+                    className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-1"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => handleDeny(ext)}
+                    disabled={processing[ext.id]}
+                    className="flex-1 px-3 py-2 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-1"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">cancel</span>
+                    Deny
+                  </button>
+                </div>
+              ) : (
+                <div className="text-xs text-[#5d479e] dark:text-slate-400">
+                  {ext.teacher_response ? <span>Teacher: {ext.teacher_response}</span> : <span>No teacher note</span>}
+                </div>
+              )}
             </div>
           ))
         )}

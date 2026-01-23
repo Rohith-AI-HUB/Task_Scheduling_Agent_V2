@@ -39,6 +39,13 @@ const SubjectView = () => {
   const [rosterLoading, setRosterLoading] = useState(false);
   const [rosterError, setRosterError] = useState('');
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
+  const [isExtensionOpen, setIsExtensionOpen] = useState(false);
+  const [extensionTask, setExtensionTask] = useState(null);
+  const [extensionDeadline, setExtensionDeadline] = useState('');
+  const [extensionReason, setExtensionReason] = useState('');
+  const [extensionError, setExtensionError] = useState('');
+  const [extensionSubmitting, setExtensionSubmitting] = useState(false);
+  const [extensionSuccess, setExtensionSuccess] = useState('');
 
   const getErrorMessage = (err, fallback) => {
     const detail = err?.response?.data?.detail;
@@ -264,6 +271,73 @@ const SubjectView = () => {
     const d = new Date(deadline);
     if (Number.isNaN(d.getTime())) return null;
     return d.toLocaleString();
+  };
+
+  const formatDateInputValue = (value) => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    const offset = d.getTimezoneOffset();
+    const local = new Date(d.getTime() - offset * 60000);
+    return local.toISOString().slice(0, 16);
+  };
+
+  const openExtensionRequest = (task) => {
+    if (!task?.deadline) return;
+    setExtensionTask(task);
+    setExtensionReason('');
+    setExtensionError('');
+    setExtensionSuccess('');
+    const base = new Date(task.deadline);
+    if (!Number.isNaN(base.getTime())) {
+      base.setDate(base.getDate() + 1);
+      setExtensionDeadline(formatDateInputValue(base));
+    } else {
+      setExtensionDeadline('');
+    }
+    setIsExtensionOpen(true);
+  };
+
+  const handleSubmitExtension = async () => {
+    if (!extensionTask) return;
+    const reason = extensionReason.trim();
+    if (!extensionDeadline) {
+      setExtensionError('Select a requested deadline');
+      return;
+    }
+    if (reason.length < 10) {
+      setExtensionError('Reason must be at least 10 characters');
+      return;
+    }
+
+    const currentDeadline = new Date(extensionTask.deadline);
+    const requested = new Date(extensionDeadline);
+    if (Number.isNaN(requested.getTime())) {
+      setExtensionError('Requested deadline is invalid');
+      return;
+    }
+    if (currentDeadline instanceof Date && !Number.isNaN(currentDeadline.getTime())) {
+      if (requested.getTime() <= currentDeadline.getTime()) {
+        setExtensionError('Requested deadline must be after current deadline');
+        return;
+      }
+    }
+
+    setExtensionSubmitting(true);
+    setExtensionError('');
+    setExtensionSuccess('');
+    try {
+      await api.post('/extensions', {
+        task_id: extensionTask.id,
+        requested_deadline: requested.toISOString(),
+        reason,
+      });
+      setExtensionSuccess('Extension request submitted');
+    } catch (err) {
+      setExtensionError(getErrorMessage(err, 'Failed to submit extension request'));
+    } finally {
+      setExtensionSubmitting(false);
+    }
   };
 
   return (
@@ -841,23 +915,45 @@ const SubjectView = () => {
                                   {status === 'missing' ? 'Overdue' : ' '}
                                 </span>
                               )}
-                              <div
-                                className="bg-primary text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-primary/90 transition-all cursor-pointer select-none"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate(`/task/${task.id}`);
-                                }}
-                                role="button"
-                                tabIndex={0}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
+                              <div className="flex items-center gap-2">
+                                {userRole === 'student' && task.deadline && status !== 'graded' ? (
+                                  <div
+                                    className="border border-primary text-primary px-3 py-2 rounded-lg text-xs font-bold hover:bg-primary/10 transition-all cursor-pointer select-none"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openExtensionRequest(task);
+                                    }}
+                                    role="button"
+                                    tabIndex={0}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        openExtensionRequest(task);
+                                      }
+                                    }}
+                                  >
+                                    Request Extension
+                                  </div>
+                                ) : null}
+                                <div
+                                  className="bg-primary text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-primary/90 transition-all cursor-pointer select-none"
+                                  onClick={(e) => {
                                     e.stopPropagation();
                                     navigate(`/task/${task.id}`);
-                                  }
-                                }}
-                              >
-                                {status === 'graded' ? 'Review' : 'View Details'}
+                                  }}
+                                  role="button"
+                                  tabIndex={0}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      navigate(`/task/${task.id}`);
+                                    }
+                                  }}
+                                >
+                                  {status === 'graded' ? 'Review' : 'View Details'}
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -870,6 +966,101 @@ const SubjectView = () => {
             )}
           </main>
         </>
+      )}
+
+      {userRole === 'student' && isExtensionOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
+          <div
+            className="absolute inset-0"
+            onClick={() => {
+              if (extensionSubmitting) return;
+              setIsExtensionOpen(false);
+            }}
+          ></div>
+          <div className="relative bg-white dark:bg-[#1c1633] w-full max-w-[520px] max-h-[90vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-700">
+            <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-[#110d1c] dark:text-white">Request Extension</h2>
+              <button
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                onClick={() => {
+                  if (extensionSubmitting) return;
+                  setIsExtensionOpen(false);
+                }}
+                type="button"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="p-6 space-y-5 flex-1 min-h-0 overflow-y-auto">
+              {extensionError && (
+                <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+                  {extensionError}
+                </div>
+              )}
+              {extensionSuccess && (
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg text-emerald-600 dark:text-emerald-400 text-sm">
+                  {extensionSuccess}
+                </div>
+              )}
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-[#110d1c] dark:text-white">
+                  {extensionTask?.title || 'Selected Task'}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Current deadline: {formatDeadline(extensionTask?.deadline) || 'No deadline'}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Requested deadline</label>
+                <input
+                  className="h-11 w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#221a3b] px-3 text-sm text-[#110d1c] dark:text-white focus:border-primary focus:ring-1 focus:ring-primary"
+                  type="datetime-local"
+                  value={extensionDeadline}
+                  onChange={(e) => {
+                    setExtensionDeadline(e.target.value);
+                    setExtensionError('');
+                    setExtensionSuccess('');
+                  }}
+                  disabled={extensionSubmitting}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Reason</label>
+                <textarea
+                  className="min-h-[120px] w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#221a3b] px-3 py-2 text-sm text-[#110d1c] dark:text-white focus:border-primary focus:ring-1 focus:ring-primary"
+                  value={extensionReason}
+                  onChange={(e) => {
+                    setExtensionReason(e.target.value);
+                    setExtensionError('');
+                    setExtensionSuccess('');
+                  }}
+                  disabled={extensionSubmitting}
+                />
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-100 dark:border-gray-800 flex justify-end gap-3">
+              <button
+                className="px-5 py-2.5 rounded-lg text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                onClick={() => {
+                  if (extensionSubmitting) return;
+                  setIsExtensionOpen(false);
+                }}
+                type="button"
+                disabled={extensionSubmitting}
+              >
+                Close
+              </button>
+              <button
+                className="px-6 py-2.5 rounded-lg bg-primary text-white text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-60"
+                onClick={handleSubmitExtension}
+                type="button"
+                disabled={extensionSubmitting || !extensionDeadline || extensionReason.trim().length < 10}
+              >
+                {extensionSubmitting ? 'Submitting...' : 'Submit Request'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {userRole === 'teacher' && isCreateTaskOpen && (
