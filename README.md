@@ -396,7 +396,7 @@ This project is developed for academic purposes.
 
 ## 👤 Author
 
-**Rohit**
+**Rohith B**
 Developer & Architect
 
 ---

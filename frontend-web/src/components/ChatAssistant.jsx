@@ -18,6 +18,10 @@ const ChatAssistant = () => {
 
   const getErrorMessage = (err) => {
     const detail = err?.response?.data?.detail;
+    if (detail && typeof detail === 'object') {
+      if (typeof detail.error === 'string') return detail.error;
+      if (typeof detail.message === 'string') return detail.message;
+    }
     if (typeof detail === 'string') return detail;
     if (Array.isArray(detail) && detail.length > 0) {
       const first = detail[0];
@@ -100,13 +104,15 @@ const ChatAssistant = () => {
       await loadCredits();
     } catch (err) {
       const errMsg = getErrorMessage(err);
+      const errorCode = err?.response?.data?.detail?.error_code;
 
-      // Check if it's a rate limit or credit error
-      if (err?.response?.status === 429) {
-        setError('Rate limit exceeded. Please wait a moment.');
-      } else if (errMsg.includes('credit') || errMsg.includes('limit')) {
+      if (errorCode === 'NO_CREDITS') {
         setError(errMsg);
         await loadCredits(); // Refresh credits display
+      } else if (errorCode === 'RATE_LIMIT_EXCEEDED' || errorCode === 'RATE_LIMIT') {
+        setError('Rate limit exceeded. Please wait a moment.');
+      } else if (err?.response?.status === 429) {
+        setError(errMsg);
       } else {
         setError(errMsg);
       }
@@ -140,11 +146,14 @@ const ChatAssistant = () => {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const creditsRemaining = credits?.credits_remaining ?? 0;
+  const creditsRemaining = credits?.credits_remaining ?? null;
   const creditsLimit = credits?.credits_limit ?? 25;
-  const creditsPercentage = (creditsRemaining / creditsLimit) * 100;
-  const isLowCredits = creditsRemaining <= 5 && creditsRemaining > 0;
-  const isOutOfCredits = creditsRemaining <= 0;
+  const creditsPercentage =
+    creditsRemaining === null ? 100 : (creditsRemaining / creditsLimit) * 100;
+  const isLowCredits = creditsRemaining !== null && creditsRemaining <= 5 && creditsRemaining > 0;
+  const isOutOfCredits = creditsRemaining !== null && creditsRemaining <= 0;
+  const creditsDisplay =
+    creditsRemaining === null ? `--/${creditsLimit}` : `${creditsRemaining}/${creditsLimit}`;
 
   return (
     <div
@@ -207,7 +216,7 @@ const ChatAssistant = () => {
                     : 'text-primary dark:text-primary'
                 }`}
               >
-                {creditsRemaining}/{creditsLimit}
+                {creditsDisplay}
               </span>
             </div>
             <div className="w-full bg-[#eae6f4] dark:bg-slate-700 h-2 rounded-full overflow-hidden">

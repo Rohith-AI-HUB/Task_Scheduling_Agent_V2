@@ -335,7 +335,7 @@ async def delete_profile_photo(current_user: dict = Depends(get_current_user)):
 
 @router.get("/users", response_model=UserListResponse)
 async def list_users(
-    role: Optional[str] = Query(None, regex="^(teacher|student)$"),
+    role: Optional[str] = Query(None, pattern="^(teacher|student)$"),
     search: Optional[str] = Query(None, min_length=1, max_length=100),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
