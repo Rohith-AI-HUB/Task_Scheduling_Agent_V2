@@ -6,6 +6,7 @@ import { logout } from '../services/authService';
 import AISchedule from '../components/AISchedule';
 import DueSoon from '../components/DueSoon';
 import UpcomingTasks from '../components/UpcomingTasks';
+import ChatAssistant from '../components/ChatAssistant';
 
 const StudentDashboard = () => {
   const { currentUser, backendUser } = useAuth();
@@ -258,6 +259,7 @@ const StudentDashboard = () => {
 
           <aside className="lg:col-span-4 flex flex-col gap-6">
             <AISchedule />
+            <ChatAssistant />
             <DueSoon />
             <UpcomingTasks />
           </aside>

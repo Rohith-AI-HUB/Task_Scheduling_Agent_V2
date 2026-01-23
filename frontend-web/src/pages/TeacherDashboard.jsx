@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { logout } from '../services/authService';
+import ChatAssistant from '../components/ChatAssistant';
+import ExtensionRequests from '../components/ExtensionRequests';
 
 const TeacherDashboard = () => {
   const { currentUser, backendUser } = useAuth();
@@ -434,6 +436,11 @@ const TeacherDashboard = () => {
                   ))}
                 </div>
               )}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+              <ChatAssistant />
+              <ExtensionRequests />
             </div>
 
             <div className="flex items-center justify-between mb-6">

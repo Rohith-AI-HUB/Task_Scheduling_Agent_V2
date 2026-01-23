@@ -53,6 +53,8 @@ async def ensure_mongo_indexes() -> None:
     user_context_collection = get_db()["user_context"]
     group_sets_collection = get_db()["group_sets"]
     groups_collection = get_db()["groups"]
+    ai_credits_collection = get_db()["ai_credits"]
+    extensions_collection = get_db()["extensions"]
     try:
         await submissions_collection.drop_index("uniq_submissions_task_student")
     except Exception:
@@ -184,4 +186,33 @@ async def ensure_mongo_indexes() -> None:
         [("public_id", ASCENDING)],
         unique=True,
         name="uniq_student_profile_pictures_public_id",
+    )
+
+    # AI Credits collection indexes
+    await ai_credits_collection.create_index(
+        [("user_uid", ASCENDING)],
+        unique=True,
+        name="uniq_ai_credits_user_uid",
+    )
+    await ai_credits_collection.create_index(
+        [("last_reset", ASCENDING)],
+        name="idx_ai_credits_last_reset",
+    )
+
+    # Extensions collection indexes
+    await extensions_collection.create_index(
+        [("student_uid", ASCENDING), ("created_at", ASCENDING)],
+        name="idx_extensions_student_created",
+    )
+    await extensions_collection.create_index(
+        [("task_id", ASCENDING)],
+        name="idx_extensions_task",
+    )
+    await extensions_collection.create_index(
+        [("subject_id", ASCENDING), ("status", ASCENDING)],
+        name="idx_extensions_subject_status",
+    )
+    await extensions_collection.create_index(
+        [("status", ASCENDING), ("created_at", ASCENDING)],
+        name="idx_extensions_status_created",
     )

@@ -72,7 +72,8 @@ class RateLimiter:
             "code_feedback": {"max": 20, "window": 3600},    # 20/hour
             "doc_analysis": {"max": 20, "window": 3600},     # 20/hour
             "schedule": {"max": 60, "window": 3600},         # 60/hour (cached)
-            "chat": {"max": 100, "window": 3600}             # 100/hour
+            "chat": {"max": 100, "window": 3600},            # 100/hour
+            "extension_analysis": {"max": 30, "window": 3600}  # 30/hour
         }
         # Track usage: {user_uid: {feature: [(timestamp, ...)]}}
         self._usage: Dict[str, Dict[str, List[datetime]]] = {}
@@ -670,6 +671,137 @@ Be friendly, concise, and helpful."""
             max_tokens=300,
             temperature=0.7
         )
+
+    async def analyze_extension_request(self, preprocessed_data: dict) -> dict:
+        """
+        Analyze extension request with AI workload assessment
+
+        Args:
+            preprocessed_data: Dict with task_info, extension_request, workload
+
+        Returns:
+            ExtensionAIAnalysis dict with recommendation and reasoning
+        """
+        task_info = preprocessed_data.get("task_info", {})
+        ext_request = preprocessed_data.get("extension_request", {})
+        workload = preprocessed_data.get("workload", {})
+
+        prompt = f"""Analyze this deadline extension request:
+
+TASK: {task_info.get('title', 'Unknown')}
+- Points: {task_info.get('points', 0)}
+- Current Deadline: {task_info.get('deadline', 'N/A')}
+- Type: {task_info.get('type', 'unknown')}
+
+EXTENSION REQUEST:
+- Requested Extension: {ext_request.get('days', 0)} days
+- Student's Reason: {ext_request.get('reason', 'No reason provided')}
+
+STUDENT WORKLOAD:
+- Pending Tasks: {workload.get('pending_tasks', 0)}
+- Overdue Tasks: {workload.get('overdue_tasks', 0)}
+- Upcoming Deadlines (next 7 days): {workload.get('upcoming_count', 0)}
+- Recent Submissions (last 7 days): {workload.get('recent_submissions', 0)}
+- Average Submission Time: {workload.get('avg_submission_time', 'N/A')} hours before deadline
+- Total Points at Stake: {workload.get('total_points', 0)}
+
+Provide a JSON response with:
+{{
+  "workload_score": <float 0-1, where 1=heavy workload>,
+  "recommendation": "<approve|deny|partial>",
+  "reasoning": "<detailed explanation>",
+  "risk_factors": ["<list>", "<of>", "<risk factors>"],
+  "suggested_extension_days": <int|null>
+}}
+
+Consider:
+1. Current workload intensity
+2. Legitimacy of the reason
+3. Student's submission history
+4. Number of overdue tasks
+5. Fair compromise between student needs and academic rigor"""
+
+        system_prompt = """You are an academic advisor analyzing deadline extension requests.
+Provide fair, evidence-based recommendations that balance student wellbeing with academic standards.
+Be strict but compassionate. Consider workload, but don't enable procrastination."""
+
+        fallback_response = {
+            "workload_score": 0.5,
+            "recommendation": "partial",
+            "reasoning": "Unable to generate AI analysis. Please review manually based on student's workload and reason provided.",
+            "risk_factors": ["Manual review needed"],
+            "suggested_extension_days": max(1, ext_request.get('days', 3) // 2)
+        }
+
+        try:
+            result = await self.safe_call(
+                feature="extension_analysis",
+                user_uid="system",  # Extension analysis is not user-specific for rate limiting
+                prompt=prompt,
+                system_prompt=system_prompt,
+                fallback=None,  # We'll handle fallback manually
+                use_cache=False,
+                max_tokens=400,
+                temperature=0.3  # Lower temperature for more consistent analysis
+            )
+
+            # Parse JSON response
+            import json
+            import re
+
+            # Try to extract JSON from response
+            json_match = re.search(r'\{[\s\S]*\}', result)
+            if json_match:
+                analysis = json.loads(json_match.group())
+
+                # Validate required fields
+                required_fields = ["workload_score", "recommendation", "reasoning"]
+                if all(field in analysis for field in required_fields):
+                    # Ensure workload_score is in range
+                    analysis["workload_score"] = max(0.0, min(1.0, float(analysis.get("workload_score", 0.5))))
+
+                    # Ensure recommendation is valid
+                    if analysis["recommendation"] not in ["approve", "deny", "partial"]:
+                        analysis["recommendation"] = "partial"
+
+                    # Ensure risk_factors is a list
+                    if not isinstance(analysis.get("risk_factors"), list):
+                        analysis["risk_factors"] = []
+
+                    # Create the response object
+                    from app.models.extension import ExtensionAIAnalysis
+                    return ExtensionAIAnalysis(
+                        workload_score=analysis["workload_score"],
+                        recommendation=analysis["recommendation"],
+                        reasoning=analysis["reasoning"],
+                        current_workload=workload,
+                        risk_factors=analysis.get("risk_factors", []),
+                        suggested_extension_days=analysis.get("suggested_extension_days")
+                    )
+
+            # If parsing failed, return fallback
+            logger.warning("Failed to parse extension analysis JSON, using fallback")
+            from app.models.extension import ExtensionAIAnalysis
+            return ExtensionAIAnalysis(
+                workload_score=fallback_response["workload_score"],
+                recommendation=fallback_response["recommendation"],
+                reasoning=fallback_response["reasoning"],
+                current_workload=workload,
+                risk_factors=fallback_response["risk_factors"],
+                suggested_extension_days=fallback_response["suggested_extension_days"]
+            )
+
+        except Exception as e:
+            logger.error(f"Extension analysis failed: {e}")
+            from app.models.extension import ExtensionAIAnalysis
+            return ExtensionAIAnalysis(
+                workload_score=fallback_response["workload_score"],
+                recommendation=fallback_response["recommendation"],
+                reasoning=fallback_response["reasoning"],
+                current_workload=workload,
+                risk_factors=fallback_response["risk_factors"],
+                suggested_extension_days=fallback_response["suggested_extension_days"]
+            )
 
     def invalidate_schedule_cache(self, user_uid: str):
         """Invalidate schedule cache for a user (call when tasks change)"""
