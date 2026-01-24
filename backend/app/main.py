@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
-from app.api import auth, subjects, tasks, submissions, groups, extensions, ai_assistant, dashboard, profile_pictures, ai_evaluation
+from app.api import auth, subjects, tasks, submissions, groups, extensions, ai_assistant, dashboard, profile_pictures, ai_evaluation, quizzes
 from app.config import settings
 from app.database.connection import close_mongo_connection, connect_to_mongo, ensure_mongo_indexes
 from app.utils.firebase_verify import initialize_firebase
@@ -48,6 +48,7 @@ app.include_router(groups.router, prefix="/api/groups", tags=["groups"])
 app.include_router(extensions.router, prefix="/api/extensions", tags=["extensions"])
 app.include_router(ai_assistant.router, prefix="/api/ai", tags=["ai"])
 app.include_router(ai_evaluation.router, prefix="/api/ai-eval", tags=["ai_evaluation"])
+app.include_router(quizzes.router, prefix="/api/quizzes", tags=["quizzes"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(profile_pictures.router, prefix="/api/profile-pictures", tags=["profile_pictures"])
 

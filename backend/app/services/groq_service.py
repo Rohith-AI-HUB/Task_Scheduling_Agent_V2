@@ -729,6 +729,259 @@ Example:
             logger.error(f"Error extracting tasks: {e}")
             return fallback
 
+    async def analyze_project_submission(
+        self,
+        user_uid: str,
+        content: str,
+        task_title: str,
+        task_description: str,
+        submission_type: str = "project"
+    ) -> dict:
+        """
+        Enhanced project analysis with automatic category selection.
+        Groq AI decides which analysis framework to use based on submission type.
+
+        Available frameworks:
+        - Academic: Introduction, Methodology, Results, Discussion, Conclusion
+        - Technical: Problem, Solution, Implementation, Testing, Documentation
+        - General Quality: Content, Structure, Clarity, Research, Formatting
+        - Custom: Based on teacher's task description
+
+        Args:
+            user_uid: Student's user ID
+            content: Project submission text
+            task_title: Project title
+            task_description: Teacher's requirements
+            submission_type: Type of submission (project, assignment, extra_credit)
+
+        Returns:
+            Dict with category_scores, overall_score, feedback, and analysis_framework_used
+        """
+        content_preview = content[:5000] if len(content) > 5000 else content
+
+        prompt = f"""TASK: {task_title}
+REQUIREMENTS: {task_description}
+SUBMISSION TYPE: {submission_type}
+
+SUBMISSION CONTENT:
+"{content_preview}"
+
+Analyze this submission intelligently:
+1. Choose the BEST analysis framework from these options:
+   - ACADEMIC: For research papers (Intro, Methodology, Results, Discussion, Conclusion)
+   - TECHNICAL: For engineering/coding projects (Problem, Solution, Implementation, Testing, Docs)
+   - GENERAL: For essays/reports (Content, Structure, Clarity, Research, Formatting)
+   - CUSTOM: Extract categories from teacher's requirements
+
+2. Score EACH category (0-100)
+
+3. Provide specific feedback for each category
+
+4. Calculate overall weighted score
+
+Respond in this EXACT JSON format:
+{{
+  "framework_used": "ACADEMIC | TECHNICAL | GENERAL | CUSTOM",
+  "categories": {{
+    "category_name_1": {{
+      "score": 85,
+      "feedback": "Specific feedback about this category",
+      "weight": 0.25
+    }},
+    "category_name_2": {{
+      "score": 78,
+      "feedback": "Specific feedback",
+      "weight": 0.20
+    }}
+  }},
+  "overall_score": 82,
+  "overall_feedback": "2-3 sentences summary",
+  "strengths": ["strength 1", "strength 2"],
+  "improvements": ["improvement 1", "improvement 2"]
+}}
+
+Be thorough and constructive. All scores 0-100."""
+
+        system_prompt = """You are an expert educational evaluator with expertise in:
+- Academic research assessment
+- Technical project evaluation
+- Writing quality analysis
+- Adaptive grading frameworks
+
+Always respond with valid JSON. Be fair, thorough, and constructive."""
+
+        fallback_response = {
+            "framework_used": "GENERAL",
+            "categories": {
+                "Content Quality": {"score": 70, "feedback": "Meets basic requirements", "weight": 0.40},
+                "Structure": {"score": 65, "feedback": "Adequate organization", "weight": 0.30},
+                "Clarity": {"score": 68, "feedback": "Generally clear", "weight": 0.30}
+            },
+            "overall_score": 68,
+            "overall_feedback": "Submission meets basic requirements. Review for improvements.",
+            "strengths": ["Submitted on time"],
+            "improvements": ["Add more detail", "Improve structure"],
+            "raw_response": "Fallback - Groq unavailable"
+        }
+
+        try:
+            response = await self.safe_call(
+                feature="doc_analysis",
+                user_uid=user_uid,
+                prompt=prompt,
+                system_prompt=system_prompt,
+                fallback=json.dumps(fallback_response),
+                use_cache=False,
+                max_tokens=1500,
+                temperature=0.4,
+                use_grading_key=True
+            )
+
+            # Clean up response to ensure valid JSON
+            response = response.strip()
+            if response.startswith("```json"):
+                response = response[7:]
+            if response.endswith("```"):
+                response = response[:-3]
+            response = response.strip()
+
+            result = json.loads(response)
+            result["raw_response"] = response
+            return result
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to decode Groq JSON response for project analysis: {e}")
+            logger.error(f"Response was: {response}")
+            return fallback_response
+        except Exception as e:
+            logger.error(f"Error in project analysis: {e}")
+            return fallback_response
+
+    async def generate_quiz_questions(
+        self,
+        user_uid: str,
+        document_content: str,
+        topic: str,
+        num_questions: int = 10
+    ) -> List[dict]:
+        """
+        Generate multiple-choice quiz questions from a document and topic.
+
+        Args:
+            user_uid: Teacher's user ID
+            document_content: Source material (textbook content, etc.)
+            topic: Specific topic/chapter to focus on
+            num_questions: Number of questions to generate (5-50)
+
+        Returns:
+            List of question objects with format:
+            {
+                "question": "What is...?",
+                "options": ["A", "B", "C", "D"],
+                "correct_answer": 0,  # Index of correct option (0-3)
+                "explanation": "Brief explanation of correct answer"
+            }
+        """
+        # Limit content size for API call
+        content_preview = document_content[:8000] if len(document_content) > 8000 else document_content
+
+        # Ensure num_questions is within bounds
+        num_questions = max(5, min(50, num_questions))
+
+        prompt = f"""Generate {num_questions} multiple-choice questions from the following educational content.
+
+TOPIC: {topic}
+
+SOURCE MATERIAL:
+"{content_preview}"
+
+Requirements:
+1. Each question must have EXACTLY 4 answer choices (A, B, C, D)
+2. Only ONE answer is correct
+3. Questions should test understanding, not just memorization
+4. Vary difficulty levels (easy, medium, hard)
+5. Make incorrect options plausible but clearly wrong
+6. Cover different aspects of the topic
+
+Respond in this EXACT JSON format (array of {num_questions} questions):
+[
+  {{
+    "question": "What is the primary function of X?",
+    "options": [
+      "Option A text",
+      "Option B text",
+      "Option C text",
+      "Option D text"
+    ],
+    "correct_answer": 2,
+    "explanation": "Brief explanation why option C is correct",
+    "difficulty": "easy|medium|hard"
+  }}
+]
+
+Ensure all {num_questions} questions are unique and relevant to the topic."""
+
+        system_prompt = """You are an expert educational assessment designer.
+Create high-quality multiple-choice questions that:
+- Test comprehension and application, not just recall
+- Have clear, unambiguous correct answers
+- Include plausible distractors
+- Are appropriately challenging
+Always output valid JSON array only."""
+
+        fallback = []
+
+        try:
+            response = await self.safe_call(
+                feature="test_generation",
+                user_uid=user_uid,
+                prompt=prompt,
+                system_prompt=system_prompt,
+                fallback="[]",
+                use_cache=True,  # Cache quiz generation to reduce costs
+                cache_ttl=7200,  # 2 hours
+                max_tokens=3000,  # Allow more tokens for longer quizzes
+                temperature=0.6,  # Slightly creative for varied questions
+                use_grading_key=True
+            )
+
+            # Clean up response
+            response = response.strip()
+            if response.startswith("```json"):
+                response = response[7:]
+            if response.endswith("```"):
+                response = response[:-3]
+            response = response.strip()
+
+            questions = json.loads(response)
+
+            # Validate structure
+            if not isinstance(questions, list):
+                logger.error("Quiz questions response is not a list")
+                return fallback
+
+            # Validate each question
+            valid_questions = []
+            for q in questions:
+                if (isinstance(q, dict) and
+                    "question" in q and
+                    "options" in q and
+                    "correct_answer" in q and
+                    isinstance(q["options"], list) and
+                    len(q["options"]) == 4 and
+                    isinstance(q["correct_answer"], int) and
+                    0 <= q["correct_answer"] <= 3):
+                    valid_questions.append(q)
+
+            return valid_questions[:num_questions]  # Ensure we don't return more than requested
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to decode quiz questions JSON: {e}")
+            return fallback
+        except Exception as e:
+            logger.error(f"Error generating quiz questions: {e}")
+            return fallback
+
 
 # Create singleton instance
 groq_service = GroqService()

@@ -44,9 +44,29 @@ class DocumentEvaluationConfig(BaseModel):
     weight: float = Field(default=0.3, ge=0.0, le=1.0)
 
 
+class QuizQuestion(BaseModel):
+    question: str = Field(min_length=1, max_length=1000)
+    options: list[str] = Field(min_length=2, max_length=4)
+    correct_answer: int = Field(ge=0, le=3)
+    explanation: Optional[str] = Field(default=None, max_length=500)
+    difficulty: Optional[str] = Field(default="medium", max_length=20)
+    points: int = Field(default=1, ge=1, le=10)
+
+
+class QuizEvaluationConfig(BaseModel):
+    questions: list[QuizQuestion] = Field(default_factory=list, max_length=50)
+    time_limit_minutes: int = Field(default=30, ge=5, le=180)
+    enable_fullscreen: bool = True
+    enable_anti_cheating: bool = True
+    shuffle_questions: bool = True
+    shuffle_options: bool = True
+    passing_score: int = Field(default=60, ge=0, le=100)
+
+
 class TaskEvaluationConfig(BaseModel):
     code: Optional[CodeEvaluationConfig] = None
     document: Optional[DocumentEvaluationConfig] = None
+    quiz: Optional[QuizEvaluationConfig] = None
 
 
 class TaskCreateRequest(BaseModel):

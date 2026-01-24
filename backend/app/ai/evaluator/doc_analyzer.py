@@ -260,6 +260,152 @@ def extract_text_from_pdf(path: str | Path) -> str:
         raise RuntimeError(f"Failed to extract text from PDF: {e}") from e
 
 
+def extract_text_from_pptx(path: str | Path) -> str:
+    """Extract text content from a PowerPoint PPTX file."""
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"PPTX file not found: {p}")
+
+    try:
+        from pptx import Presentation  # type: ignore
+    except Exception as e:
+        raise RuntimeError("PPTX extraction library not installed (python-pptx required)") from e
+
+    try:
+        prs = Presentation(str(p))
+        chunks: list[str] = []
+
+        for slide_num, slide in enumerate(prs.slides, 1):
+            slide_text = []
+
+            # Extract text from shapes
+            for shape in slide.shapes:
+                if hasattr(shape, "text") and shape.text:
+                    slide_text.append(shape.text)
+
+                # Extract text from table cells if present
+                if hasattr(shape, "table"):
+                    for row in shape.table.rows:
+                        for cell in row.cells:
+                            if cell.text:
+                                slide_text.append(cell.text)
+
+            if slide_text:
+                chunks.append(f"Slide {slide_num}:\n" + "\n".join(slide_text))
+
+        return "\n\n".join(chunks)
+    except Exception as e:
+        raise RuntimeError(f"Failed to extract text from PPTX: {e}") from e
+
+
+def extract_text_from_docx(path: str | Path) -> str:
+    """Extract text content from a Word DOCX file."""
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"DOCX file not found: {p}")
+
+    try:
+        from docx import Document  # type: ignore
+    except Exception as e:
+        raise RuntimeError("DOCX extraction library not installed (python-docx required)") from e
+
+    try:
+        doc = Document(str(p))
+        chunks: list[str] = []
+
+        # Extract text from paragraphs
+        for paragraph in doc.paragraphs:
+            if paragraph.text.strip():
+                chunks.append(paragraph.text)
+
+        # Extract text from tables
+        for table in doc.tables:
+            for row in table.rows:
+                row_text = []
+                for cell in row.cells:
+                    if cell.text.strip():
+                        row_text.append(cell.text.strip())
+                if row_text:
+                    chunks.append(" | ".join(row_text))
+
+        return "\n\n".join(chunks)
+    except Exception as e:
+        raise RuntimeError(f"Failed to extract text from DOCX: {e}") from e
+
+
+def extract_text_from_doc(path: str | Path) -> str:
+    """
+    Extract text content from an old Word DOC file.
+    Note: This requires antiword or similar external tool on the system.
+    Falls back to basic extraction if antiword is not available.
+    """
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"DOC file not found: {p}")
+
+    import subprocess
+
+    # Try antiword first (works on Linux/Mac)
+    try:
+        result = subprocess.run(
+            ["antiword", str(p)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    # Fallback: Try python-docx (might work for some .doc files)
+    try:
+        return extract_text_from_docx(p)
+    except Exception:
+        pass
+
+    raise RuntimeError(
+        "Failed to extract text from DOC file. "
+        "Please install 'antiword' or convert to DOCX format."
+    )
+
+
+def extract_text_from_attachment(path: str | Path) -> str:
+    """
+    Auto-detect file type and extract text from common document formats.
+    Supports: PDF, PPTX, DOCX, DOC, TXT.
+
+    Args:
+        path: Path to the document file
+
+    Returns:
+        Extracted text content
+
+    Raises:
+        FileNotFoundError: If file doesn't exist
+        RuntimeError: If extraction fails or format is unsupported
+    """
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"File not found: {p}")
+
+    ext = p.suffix.lower()
+
+    if ext == ".pdf":
+        return extract_text_from_pdf(p)
+    elif ext == ".pptx" or ext == ".ppt":
+        return extract_text_from_pptx(p)
+    elif ext == ".docx":
+        return extract_text_from_docx(p)
+    elif ext == ".doc":
+        return extract_text_from_doc(p)
+    elif ext == ".txt":
+        return p.read_text(encoding="utf-8", errors="ignore")
+    else:
+        raise RuntimeError(f"Unsupported file type: {ext}")
+
+
 async def analyze_text_with_groq(
     *,
     user_uid: str,
