@@ -35,6 +35,7 @@ class Settings(BaseSettings):
 
     # Groq AI Configuration
     groq_api_key: Optional[str] = Field(default=None, alias="GROQ_API_KEY")
+    groq_grading_api_key: Optional[str] = Field(default=None, alias="GROQ_GRADING_API_KEY")
     groq_model: str = Field(default="llama-3.1-8b-instant", alias="GROQ_MODEL")
     groq_enable_routing: bool = Field(default=True, alias="GROQ_ENABLE_ROUTING")
     groq_enable_guards: bool = Field(default=True, alias="GROQ_ENABLE_GUARDS")

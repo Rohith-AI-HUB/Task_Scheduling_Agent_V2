@@ -2,8 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import EvaluationResults from '../components/EvaluationResults';
-import EvaluationConfigEditor from '../components/EvaluationConfigEditor';
 
 const TaskView = () => {
   const { id } = useParams();
@@ -44,25 +42,16 @@ const TaskView = () => {
     if (typeof err?.message === 'string' && err.message) return err.message;
     return fallback;
   };
-  const [gradeFeedback, setGradeFeedback] = useState({});
-  const [gradeScore, setGradeScore] = useState({});
-  const [gradeLoading, setGradeLoading] = useState({});
-  const [evaluationLoading, setEvaluationLoading] = useState({});
-  const [batchEvaluationLoading, setBatchEvaluationLoading] = useState(false);
-  const [evaluationSummary, setEvaluationSummary] = useState(null);
+
   const [isEditTaskOpen, setIsEditTaskOpen] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editDeadline, setEditDeadline] = useState('');
   const [editPoints, setEditPoints] = useState('');
   const [editTaskType, setEditTaskType] = useState('');
-  const [editEvaluationConfig, setEditEvaluationConfig] = useState(null);
   const [editSaving, setEditSaving] = useState(false);
   const [taskEditError, setTaskEditError] = useState('');
-  const pendingReviewCount = useMemo(
-    () => submissions.filter((s) => s?.score === null || s?.score === undefined).length,
-    [submissions]
-  );
+
   const groupById = useMemo(() => {
     const map = new Map();
     for (const g of groupList || []) {
@@ -142,7 +131,6 @@ const TaskView = () => {
     setEditDeadline(toDatetimeLocalValue(task.deadline));
     setEditPoints(typeof task.points === 'number' ? String(task.points) : '');
     setEditTaskType(task.task_type || '');
-    setEditEvaluationConfig(task.evaluation_config || null);
     setIsEditTaskOpen(true);
   };
 
@@ -157,7 +145,6 @@ const TaskView = () => {
         deadline: editDeadline ? new Date(editDeadline).toISOString() : null,
         points: editPoints !== '' ? Number(editPoints) : null,
         task_type: editTaskType ? editTaskType : null,
-        evaluation_config: editEvaluationConfig,
       };
       const response = await api.put(`/tasks/${id}`, payload);
       setTask(response.data);
@@ -293,14 +280,7 @@ const TaskView = () => {
       if (userRole === 'teacher') {
         const response = await api.get('/submissions', { params: { task_id: id } });
         setSubmissions(response.data || []);
-        try {
-          const summaryRes = await api.get(`/tasks/${id}/evaluations/summary`);
-          setEvaluationSummary(summaryRes.data || null);
-        } catch (err) {
-          setEvaluationSummary(null);
-        }
       } else if (userRole === 'student') {
-        setEvaluationSummary(null);
         try {
           const response = await api.get('/submissions/me', { params: { task_id: id } });
           setMySubmission(response.data);
@@ -320,58 +300,6 @@ const TaskView = () => {
       setSubmissionLoading(false);
     }
   };
-
-  const triggerEvaluation = async (submissionId) => {
-    if (!submissionId) return;
-    setEvaluationLoading((prev) => ({ ...prev, [submissionId]: true }));
-    setSubmissionError('');
-    try {
-      const response = await api.post(`/submissions/${submissionId}/evaluate`);
-      setSubmissions((prev) => prev.map((s) => (s.id === submissionId ? response.data : s)));
-    } catch (err) {
-      setSubmissionError(getErrorMessage(err, 'Failed to trigger evaluation'));
-    } finally {
-      setEvaluationLoading((prev) => ({ ...prev, [submissionId]: false }));
-    }
-  };
-
-  const batchEvaluate = async () => {
-    if (!id) return;
-    setBatchEvaluationLoading(true);
-    setSubmissionError('');
-    try {
-      await api.post('/submissions/batch/evaluate', { task_id: id });
-      await loadSubmissions();
-    } catch (err) {
-      setSubmissionError(getErrorMessage(err, 'Failed to batch evaluate'));
-    } finally {
-      setBatchEvaluationLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (userRole !== 'teacher') return;
-
-    const runningIds = submissions
-      .filter((s) => s?.evaluation?.status === 'pending' || s?.evaluation?.status === 'running')
-      .map((s) => s.id)
-      .filter(Boolean);
-
-    if (runningIds.length === 0) return;
-
-    const pollInterval = setInterval(async () => {
-      const results = await Promise.all(
-        runningIds.map((sid) => api.get(`/submissions/${sid}/evaluation/progress`).catch(() => null))
-      );
-      const updated = results.some((r) => {
-        const st = r?.data?.status;
-        return st === 'completed' || st === 'failed';
-      });
-      if (updated) await loadSubmissions();
-    }, 3000);
-
-    return () => clearInterval(pollInterval);
-  }, [submissions, userRole]);
 
   useEffect(() => {
     loadSubmissions();
@@ -732,22 +660,7 @@ const TaskView = () => {
                       <h3 className="text-xl font-bold text-[#110d1c] dark:text-white">Submissions</h3>
                     </div>
                     <div className="flex items-center gap-3">
-                      <div className="text-sm font-medium text-[#5d479e] dark:text-[#a094c7] bg-[#f0eff5] dark:bg-[#251e3b] px-3 py-1 rounded-full">
-                        {pendingReviewCount} Pending Review
-                      </div>
-                      {evaluationSummary?.average_ai_score !== null && evaluationSummary?.average_ai_score !== undefined ? (
-                        <div className="text-sm font-medium text-[#5d479e] dark:text-[#a094c7] bg-[#f0eff5] dark:bg-[#251e3b] px-3 py-1 rounded-full">
-                          AI Avg {Number(evaluationSummary.average_ai_score).toFixed(1)}
-                        </div>
-                      ) : null}
-                      <button
-                        onClick={batchEvaluate}
-                        className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-colors disabled:opacity-60"
-                        disabled={submissionLoading || batchEvaluationLoading}
-                        type="button"
-                      >
-                        {batchEvaluationLoading ? 'Evaluating...' : 'Evaluate All'}
-                      </button>
+
                       <button
                         onClick={loadSubmissions}
                         className="px-4 py-2 rounded-lg bg-white dark:bg-[#1c162e] border border-[#eae6f4] dark:border-[#2a2438] text-sm font-bold hover:border-primary/40 transition-colors disabled:opacity-60"
@@ -759,83 +672,7 @@ const TaskView = () => {
                     </div>
                   </div>
 
-                  {/* Evaluation Analytics Dashboard */}
-                  {evaluationSummary && submissions.length > 0 && (
-                    <div className="mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {/* Total Submissions */}
-                      <div className="bg-white dark:bg-[#1c162e] rounded-xl border border-[#eae6f4] dark:border-[#2a2438] p-4">
-                        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-2">
-                          <span className="material-symbols-outlined text-lg">assignment</span>
-                          <p className="text-xs font-bold uppercase tracking-wider">Total Submissions</p>
-                        </div>
-                        <p className="text-3xl font-bold text-[#110d1c] dark:text-white">
-                          {evaluationSummary.total_submissions || 0}
-                        </p>
-                      </div>
 
-                      {/* Average AI Score */}
-                      {evaluationSummary.average_ai_score !== null && evaluationSummary.average_ai_score !== undefined && (
-                        <div className="bg-white dark:bg-[#1c162e] rounded-xl border border-[#eae6f4] dark:border-[#2a2438] p-4">
-                          <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-2">
-                            <span className="material-symbols-outlined text-lg">smart_toy</span>
-                            <p className="text-xs font-bold uppercase tracking-wider">Avg AI Score</p>
-                          </div>
-                          <div className="flex items-baseline gap-2">
-                            <p className="text-3xl font-bold text-primary">
-                              {Number(evaluationSummary.average_ai_score).toFixed(1)}
-                            </p>
-                            <span className="text-sm text-gray-500 dark:text-gray-400">/100</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Evaluation Status Breakdown */}
-                      {evaluationSummary.status_counts && Object.keys(evaluationSummary.status_counts).length > 0 && (
-                        <div className="bg-white dark:bg-[#1c162e] rounded-xl border border-[#eae6f4] dark:border-[#2a2438] p-4">
-                          <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-2">
-                            <span className="material-symbols-outlined text-lg">assessment</span>
-                            <p className="text-xs font-bold uppercase tracking-wider">Evaluation Status</p>
-                          </div>
-                          <div className="space-y-1">
-                            {Object.entries(evaluationSummary.status_counts).map(([status, count]) => (
-                              <div key={status} className="flex items-center justify-between text-sm">
-                                <span className="capitalize text-gray-600 dark:text-gray-400">{status}:</span>
-                                <span className="font-bold text-[#110d1c] dark:text-white">{count}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Quick Stats */}
-                      <div className="bg-white dark:bg-[#1c162e] rounded-xl border border-[#eae6f4] dark:border-[#2a2438] p-4">
-                        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-2">
-                          <span className="material-symbols-outlined text-lg">trending_up</span>
-                          <p className="text-xs font-bold uppercase tracking-wider">Quick Stats</p>
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600 dark:text-gray-400">Graded:</span>
-                            <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                              {submissions.filter((s) => s.score !== null && s.score !== undefined).length}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600 dark:text-gray-400">Ungraded:</span>
-                            <span className="font-bold text-amber-600 dark:text-amber-400">
-                              {submissions.filter((s) => s.score === null || s.score === undefined).length}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-gray-600 dark:text-gray-400">With Feedback:</span>
-                            <span className="font-bold text-blue-600 dark:text-blue-400">
-                              {submissions.filter((s) => s.feedback && s.feedback.trim()).length}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
 
                   {submissionLoading ? (
                     <div className="text-[#5d479e] dark:text-[#a094c7]">Loading submissions...</div>
@@ -846,14 +683,7 @@ const TaskView = () => {
                       {submissions.map((s) => {
                         const isUngraded = s?.score === null || s?.score === undefined;
                         const group = s?.group_id ? groupById.get(s.group_id) : null;
-                        const evalStatusRaw = String(s?.evaluation?.status || '').toLowerCase();
-                        const evalStatus =
-                          evalStatusRaw === 'pending' ||
-                          evalStatusRaw === 'running' ||
-                          evalStatusRaw === 'completed' ||
-                          evalStatusRaw === 'failed'
-                            ? evalStatusRaw
-                            : null;
+
                         return (
                           <div
                             key={s.id}
@@ -878,21 +708,7 @@ const TaskView = () => {
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
-                                {evalStatus ? (
-                                  <span
-                                    className={`text-xs font-semibold px-2 py-1 rounded ${
-                                      evalStatus === 'completed'
-                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                                        : evalStatus === 'failed'
-                                          ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'
-                                          : evalStatus === 'running'
-                                            ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300'
-                                            : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-                                    }`}
-                                  >
-                                    AI {evalStatus}
-                                  </span>
-                                ) : null}
+
                                 <span
                                   className={`text-xs font-semibold px-2 py-1 rounded ${
                                     isUngraded
@@ -935,82 +751,9 @@ const TaskView = () => {
                                 </div>
                               ) : null}
 
-                              <div className="mb-6">
-                                <div className="flex items-center justify-between mb-3">
-                                  <h5 className="text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase tracking-widest">
-                                    Evaluation
-                                  </h5>
-                                  <button
-                                    className="px-3 py-2 rounded-lg bg-white dark:bg-[#1c162e] border border-[#eae6f4] dark:border-[#2a2438] text-xs font-bold hover:border-primary/40 transition-colors disabled:opacity-60"
-                                    disabled={!!evaluationLoading[s.id]}
-                                    onClick={() => triggerEvaluation(s.id)}
-                                    type="button"
-                                  >
-                                    {evaluationLoading[s.id] ? 'Starting...' : 'Evaluate'}
-                                  </button>
-                                </div>
-                                <EvaluationResults evaluation={s?.evaluation} taskPoints={task?.points} />
-                              </div>
 
-                              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
-                                <div className="md:col-span-1">
-                                  <label className="block text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-2 tracking-widest">
-                                    Score{typeof task.points === 'number' ? ` / ${task.points}` : ''}
-                                  </label>
-                                  <input
-                                    className="w-full bg-[#f9f8fc] dark:bg-[#140f23] border-[#eae6f4] dark:border-[#2a2438] rounded-lg focus:ring-primary focus:border-primary text-sm font-bold h-11"
-                                    placeholder="--"
-                                    type="number"
-                                    value={gradeScore[s.id] ?? (s.score ?? '')}
-                                    onChange={(e) => setGradeScore((prev) => ({ ...prev, [s.id]: e.target.value }))}
-                                    disabled={!!gradeLoading[s.id]}
-                                  />
-                                </div>
-                                <div className="md:col-span-2">
-                                  <label className="block text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-2 tracking-widest">
-                                    Feedback
-                                  </label>
-                                  <textarea
-                                    className="w-full bg-[#f9f8fc] dark:bg-[#140f23] border-[#eae6f4] dark:border-[#2a2438] rounded-lg focus:ring-primary focus:border-primary text-sm h-11 py-2.5"
-                                    placeholder="Add a comment..."
-                                    rows="1"
-                                    value={gradeFeedback[s.id] ?? (s.feedback ?? '')}
-                                    onChange={(e) =>
-                                      setGradeFeedback((prev) => ({ ...prev, [s.id]: e.target.value }))
-                                    }
-                                    disabled={!!gradeLoading[s.id]}
-                                  ></textarea>
-                                </div>
-                                <div className="md:col-span-1">
-                                  <button
-                                    className="w-full bg-primary text-white font-bold py-2.5 rounded-lg hover:bg-primary/90 transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-60"
-                                    disabled={!!gradeLoading[s.id]}
-                                    onClick={async () => {
-                                      setGradeLoading((prev) => ({ ...prev, [s.id]: true }));
-                                      setSubmissionError('');
-                                      try {
-                                        const scoreValue = gradeScore[s.id];
-                                        const feedbackValue = gradeFeedback[s.id];
-                                        const payload = {};
-                                        if (scoreValue !== undefined) {
-                                          payload.score = scoreValue === '' ? null : Number(scoreValue);
-                                        }
-                                        if (feedbackValue !== undefined) payload.feedback = feedbackValue;
-                                        const response = await api.patch(`/submissions/${s.id}/grade`, payload);
-                                        setSubmissions((prev) => prev.map((x) => (x.id === s.id ? response.data : x)));
-                                      } catch (err) {
-                                        setSubmissionError(err?.response?.data?.detail || 'Failed to save grade');
-                                      } finally {
-                                        setGradeLoading((prev) => ({ ...prev, [s.id]: false }));
-                                      }
-                                    }}
-                                    type="button"
-                                  >
-                                    <span className="material-symbols-outlined text-lg">save</span>
-                                    {gradeLoading[s.id] ? 'Saving...' : 'Save Grade'}
-                                  </button>
-                                </div>
-                              </div>
+
+
                             </div>
                           </div>
                         );
@@ -1119,13 +862,7 @@ const TaskView = () => {
                         disabled={editSaving}
                       ></textarea>
                     </div>
-                    <div className="md:col-span-2">
-                      <EvaluationConfigEditor
-                        value={editEvaluationConfig}
-                        onChange={(next) => setEditEvaluationConfig(next)}
-                        disabled={editSaving}
-                      />
-                    </div>
+
                   </div>
                 </div>
                 <div className="p-6 bg-gray-50 dark:bg-gray-900/50 flex justify-end gap-3">
@@ -1292,24 +1029,7 @@ const TaskView = () => {
                             : 'Not submitted'}
                         </p>
                       </div>
-                      <div className="flex flex-col gap-2 rounded-xl p-6 border border-[#d5cee9] dark:border-white/10 bg-white dark:bg-background-dark shadow-sm">
-                        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-                          <span className="material-symbols-outlined text-lg">grade</span>
-                          <p className="text-sm font-medium uppercase tracking-wider">Score</p>
-                        </div>
-                        <p className="text-[#110d1c] dark:text-white tracking-light text-2xl font-bold leading-tight">
-                          {mySubmission?.score ?? '—'}
-                        </p>
-                      </div>
-                      <div className="flex flex-col gap-2 rounded-xl p-6 border border-[#d5cee9] dark:border-white/10 bg-white dark:bg-background-dark shadow-sm">
-                        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-                          <span className="material-symbols-outlined text-lg">chat_bubble</span>
-                          <p className="text-sm font-medium uppercase tracking-wider">Feedback</p>
-                        </div>
-                        <p className="text-[#110d1c] dark:text-white tracking-light text-2xl font-bold leading-tight">
-                          {mySubmission?.feedback ?? '—'}
-                        </p>
-                      </div>
+
                     </div>
 
                     {task.type === 'group' ? (

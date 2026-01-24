@@ -69,6 +69,27 @@ def _build_document_feedback(document_metrics: dict[str, Any]) -> str:
     """Generate detailed document analysis feedback."""
     sections = []
 
+    # AI Analysis from Groq
+    groq_analysis = document_metrics.get("groq_analysis")
+    if groq_analysis and isinstance(groq_analysis, dict):
+        sections.append("=== AI DOCUMENT ASSESSMENT ===")
+        
+        quality = groq_analysis.get("quality_assessment")
+        if quality:
+            sections.append(f"\nAssessment: {quality}")
+            
+        structure = groq_analysis.get("structure_feedback")
+        if structure:
+            sections.append(f"\nStructure: {structure}")
+            
+        improvements = groq_analysis.get("improvements")
+        if improvements and isinstance(improvements, list):
+            sections.append("\nKey Improvements:")
+            for imp in improvements:
+                sections.append(f"• {imp}")
+        
+        sections.append("")
+
     word_count = int(document_metrics.get("word_count") or 0)
     keywords_found = document_metrics.get("keywords_found") or []
     keyword_ratio = float(document_metrics.get("keyword_match_ratio") or 0)

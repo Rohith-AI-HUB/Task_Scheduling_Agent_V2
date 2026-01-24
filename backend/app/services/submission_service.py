@@ -12,6 +12,7 @@ from app.ai.evaluator.doc_analyzer import analyze_text, extract_text_from_pdf
 from app.ai.evaluator.report_gen import build_ai_feedback
 from app.database.collections import get_collection
 from app.models.submission import SubmissionEvaluation
+from app.services.groq_service import GroqService
 
 
 def _normalize_evaluation_config(task: dict) -> dict[str, Any]:
@@ -55,6 +56,9 @@ async def evaluate_submission(*, submission_id: ObjectId, retry_count: int = 0) 
     submission = await submissions_collection.find_one({"_id": submission_id})
     if not submission:
         return
+
+    groq_service = GroqService()
+    user_uid = str(submission.get("user_id", ""))
 
     now = datetime.utcnow()
     await submissions_collection.update_one(
@@ -281,7 +285,13 @@ def _compute_ai_score(
     # ====================
     doc_score = 0.0
 
-    if doc_cfg or not code_cfg:  # Evaluate document if config exists OR if no code config
+    # If Groq analysis is available, use it as the primary source for document score
+    groq_analysis = document_metrics.get("groq_analysis")
+    if groq_analysis and isinstance(groq_analysis, dict):
+        suggested_score = groq_analysis.get("suggested_score")
+        if suggested_score is not None:
+            doc_score = float(suggested_score)
+    elif doc_cfg or not code_cfg:  # Fallback to heuristic scoring
         components = []
 
         # 1. Word Count (up to 30 points)

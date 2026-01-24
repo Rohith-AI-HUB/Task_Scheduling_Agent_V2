@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import EvaluationConfigEditor from '../components/EvaluationConfigEditor';
 
 const SubjectView = () => {
   const { id } = useParams();
@@ -27,7 +26,6 @@ const SubjectView = () => {
   const [problemStatements, setProblemStatements] = useState(['']);
   const [bulkProblems, setBulkProblems] = useState('');
   const [previewNonce, setPreviewNonce] = useState(0);
-  const [evaluationConfig, setEvaluationConfig] = useState(null);
   const [taskCreateError, setTaskCreateError] = useState('');
   const [taskCreating, setTaskCreating] = useState(false);
   const [sortMode, setSortMode] = useState('deadline');
@@ -203,7 +201,6 @@ const SubjectView = () => {
   const getStudentTaskStatus = (task) => {
     const submission = mySubmissionByTaskId.get(task.id);
     if (submission) {
-      if (submission.score !== null && submission.score !== undefined) return 'graded';
       return 'submitted';
     }
 
@@ -223,7 +220,7 @@ const SubjectView = () => {
         continue;
       }
       const status = getStudentTaskStatus(task);
-      if (status === 'graded') counts.completed += 1;
+      if (status === 'submitted') counts.completed += 1;
       else counts.pending += 1;
     }
     return counts;
@@ -244,8 +241,8 @@ const SubjectView = () => {
             if (studentTab === 'resources') return resource;
             if (resource) return false;
             const status = getStudentTaskStatus(t);
-            if (studentTab === 'completed') return status === 'graded';
-            if (studentTab === 'pending') return status !== 'graded';
+            if (studentTab === 'completed') return status === 'submitted';
+            if (studentTab === 'pending') return status !== 'submitted';
             return true;
           })
         : list;
@@ -861,18 +858,12 @@ const SubjectView = () => {
                             icon: 'menu_book',
                             label: task.task_type || 'Reading',
                           }
-                        : status === 'graded'
+                        : status === 'submitted'
                         ? {
                             className:
                               'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
                             icon: 'check_circle',
                             label: 'Completed',
-                          }
-                        : status === 'submitted'
-                        ? {
-                            className: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-                            icon: 'pending',
-                            label: 'Submitted',
                           }
                         : status === 'missing'
                         ? {
@@ -917,18 +908,11 @@ const SubjectView = () => {
                               </span>
                             </div>
                             <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
-                              {status === 'graded' && submission ? (
-                                <span className="text-primary text-xs font-bold">
-                                  Grade: {submission.score ?? '—'}
-                                  {typeof task.points === 'number' ? `/${task.points}` : ''}
-                                </span>
-                              ) : (
-                                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                                  {status === 'missing' ? 'Overdue' : ' '}
-                                </span>
-                              )}
+                              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                {status === 'missing' ? 'Overdue' : ' '}
+                              </span>
                               <div className="flex items-center gap-2">
-                                {userRole === 'student' && task.deadline && status !== 'graded' ? (
+                                {userRole === 'student' && task.deadline && status !== 'submitted' ? (
                                   <div
                                     className="border border-primary text-primary px-3 py-2 rounded-lg text-xs font-bold hover:bg-primary/10 transition-all cursor-pointer select-none"
                                     onClick={(e) => {
@@ -949,23 +933,23 @@ const SubjectView = () => {
                                   </div>
                                 ) : null}
                                 <div
-                                  className="bg-primary text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-primary/90 transition-all cursor-pointer select-none"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigate(`/task/${task.id}`);
-                                  }}
-                                  role="button"
-                                  tabIndex={0}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter' || e.key === ' ') {
-                                      e.preventDefault();
+                                    className="bg-primary text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-primary/90 transition-all cursor-pointer select-none"
+                                    onClick={(e) => {
                                       e.stopPropagation();
                                       navigate(`/task/${task.id}`);
-                                    }
-                                  }}
-                                >
-                                  {status === 'graded' ? 'Review' : 'View Details'}
-                                </div>
+                                    }}
+                                    role="button"
+                                    tabIndex={0}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        navigate(`/task/${task.id}`);
+                                      }
+                                    }}
+                                  >
+                                    View Details
+                                  </div>
                               </div>
                             </div>
                           </div>
@@ -1240,16 +1224,7 @@ const SubjectView = () => {
                     disabled={taskCreating}
                   ></textarea>
                 </div>
-                <div className="md:col-span-2">
-                  <EvaluationConfigEditor
-                    value={evaluationConfig}
-                    onChange={(next) => {
-                      setEvaluationConfig(next);
-                      setTaskCreateError('');
-                    }}
-                    disabled={taskCreating}
-                  />
-                </div>
+
                 {taskKind === 'group' ? (
                   <div className="md:col-span-2 space-y-3">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1425,7 +1400,6 @@ const SubjectView = () => {
                       task_type: taskType ? taskType : null,
                       type: taskKind,
                     };
-                    if (evaluationConfig) payload.evaluation_config = evaluationConfig;
                     if (taskKind === 'group') {
                       const size = Number(groupSize);
                       if (!Number.isFinite(size) || size < 2) throw new Error('Group size must be at least 2');
@@ -1445,7 +1419,6 @@ const SubjectView = () => {
                     setProblemStatements(['']);
                     setBulkProblems('');
                     setPreviewNonce(0);
-                    setEvaluationConfig(null);
                     setIsCreateTaskOpen(false);
                   } catch (err) {
                     setTaskCreateError(getErrorMessage(err, 'Failed to create task'));

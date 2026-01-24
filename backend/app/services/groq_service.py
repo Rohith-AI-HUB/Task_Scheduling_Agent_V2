@@ -74,7 +74,9 @@ class RateLimiter:
             "doc_analysis": {"max": 20, "window": 3600},     # 20/hour
             "schedule": {"max": 60, "window": 3600},         # 60/hour (cached)
             "chat": {"max": 100, "window": 3600},            # 100/hour
-            "extension_analysis": {"max": 30, "window": 3600}  # 30/hour
+            "extension_analysis": {"max": 30, "window": 3600},  # 30/hour
+            "test_generation": {"max": 50, "window": 3600},   # 50/hour
+            "task_extraction": {"max": 50, "window": 3600}    # 50/hour
         }
         # Track usage: {user_uid: {feature: [(timestamp, ...)]}}
         self._usage: Dict[str, Dict[str, List[datetime]]] = {}
@@ -276,6 +278,7 @@ class GroqService:
             return
 
         self.client = None
+        self.grading_client = None
         self.model = settings.groq_model
         self.cache = InMemoryCache()
         self.rate_limiter = RateLimiter()
@@ -299,9 +302,17 @@ class GroqService:
         else:
             logger.warning("⚠️ Groq API key not configured - AI features will use fallbacks")
 
+        # Initialize Groq grading client if API key is available
+        if settings.groq_grading_api_key:
+            try:
+                self.grading_client = Groq(api_key=settings.groq_grading_api_key)
+                logger.info("✅ Groq grading client initialized successfully")
+            except Exception as e:
+                logger.error(f"❌ Failed to initialize Groq grading client: {e}")
+
     def is_available(self) -> bool:
         """Check if Groq service is available"""
-        return self.client is not None
+        return self.client is not None or self.grading_client is not None
 
     def _generate_cache_key(self, feature: str, data: dict) -> str:
         """Generate a cache key from feature and data"""
@@ -314,7 +325,8 @@ class GroqService:
         prompt: str,
         system_prompt: str = "",
         max_tokens: int = 1000,
-        temperature: float = 0.7
+        temperature: float = 0.7,
+        client: Optional[Groq] = None
     ) -> str:
         """
         Make an async call to Groq API
@@ -324,11 +336,13 @@ class GroqService:
             system_prompt: Optional system prompt
             max_tokens: Maximum tokens in response
             temperature: Creativity parameter (0-1)
+            client: Optional Groq client instance (defaults to self.client)
 
         Returns:
             Response text from Groq
         """
-        if not self.client:
+        active_client = client or self.client
+        if not active_client:
             raise GroqServiceError("Groq client not initialized")
 
         messages = []
@@ -341,7 +355,7 @@ class GroqService:
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
-                lambda: self.client.chat.completions.create(
+                lambda: active_client.chat.completions.create(
                     model=self.model,
                     messages=messages,
                     max_tokens=max_tokens,
@@ -373,7 +387,8 @@ class GroqService:
         use_cache: bool = True,
         cache_ttl: int = None,
         max_tokens: int = 1000,
-        temperature: float = 0.7
+        temperature: float = 0.7,
+        use_grading_key: bool = False
     ) -> str:
         """
         Safe Groq call with rate limiting, caching, and fallback
@@ -388,18 +403,22 @@ class GroqService:
             cache_ttl: Cache TTL in seconds (default from settings)
             max_tokens: Max response tokens
             temperature: Response creativity
+            use_grading_key: Whether to use the grading API key
 
         Returns:
             Groq response or fallback
         """
+        # Determine client to use
+        client = self.grading_client if use_grading_key and self.grading_client else self.client
+
         # Check if Groq is available
-        if not self.is_available():
-            logger.debug(f"Groq not available, using fallback for {feature}")
+        if not client:
+            logger.debug(f"Groq client not available, using fallback for {feature}")
             return fallback
 
         # Check rate limit
         if not self.rate_limiter.check_limit(user_uid, feature):
-            remaining = self.rate_limiter.get_remaining(user_uid, feature)
+            # remaining = self.rate_limiter.get_remaining(user_uid, feature)
             logger.warning(f"Rate limit exceeded for user {user_uid} on {feature}")
             raise RateLimitExceeded(
                 f"Rate limit exceeded for {feature}. Please wait before trying again."
@@ -422,7 +441,8 @@ class GroqService:
                 prompt=prompt,
                 system_prompt=system_prompt,
                 max_tokens=max_tokens,
-                temperature=temperature
+                temperature=temperature,
+                client=client
             )
 
             # Record usage
@@ -457,17 +477,7 @@ class GroqService:
     ) -> str:
         """
         Generate intelligent feedback for code evaluation
-
-        Args:
-            user_uid: Student's user ID
-            code: The submitted code (truncated to 2000 chars)
-            language: Programming language
-            test_results: List of test case results
-            task_description: The assignment description
-            security_issues: Any detected security issues
-
-        Returns:
-            Constructive feedback string
+        Uses the grading API key if available.
         """
         # Preprocess data
         code_snippet = code[:2000] if len(code) > 2000 else code
@@ -523,7 +533,8 @@ Keep response under 300 words. Be encouraging but specific."""
             fallback=fallback,
             use_cache=False,  # Don't cache code feedback
             max_tokens=500,
-            temperature=0.7
+            temperature=0.7,
+            use_grading_key=True
         )
 
     async def analyze_document(
@@ -541,13 +552,7 @@ Keep response under 300 words. Be encouraging but specific."""
     ) -> dict:
         """
         Analyze document submission with Groq
-
-        Returns dict with:
-        - quality_assessment: str
-        - structure_feedback: str
-        - improvements: List[str]
-        - suggested_score: int (0-100)
-        - raw_response: str
+        Uses grading API key if available.
         """
         content_preview = content[:3000] if len(content) > 3000 else content
 
@@ -595,425 +600,135 @@ Be constructive and specific. The score should be 0-100."""
                 fallback=json.dumps(fallback_response),
                 use_cache=False,
                 max_tokens=600,
-                temperature=0.5
+                temperature=0.5,
+                use_grading_key=True
             )
-
-            # Parse JSON response
-            try:
-                # Try to extract JSON from response
-                if "```json" in response:
-                    json_str = response.split("```json")[1].split("```")[0].strip()
-                elif "```" in response:
-                    json_str = response.split("```")[1].split("```")[0].strip()
-                else:
-                    json_str = response.strip()
-
-                result = json.loads(json_str)
-                result["raw_response"] = response
-                return result
-            except json.JSONDecodeError:
-                logger.warning("Failed to parse Groq JSON response for document analysis")
-                fallback_response["raw_response"] = response
-                return fallback_response
-
+            
+            # Clean up response to ensure valid JSON
+            response = response.strip()
+            if response.startswith("```json"):
+                response = response[7:]
+            if response.endswith("```"):
+                response = response[:-3]
+            response = response.strip()
+            
+            return json.loads(response)
+        except json.JSONDecodeError:
+            logger.error(f"Failed to decode Groq JSON response: {response}")
+            return fallback_response
         except Exception as e:
-            logger.error(f"Document analysis error: {e}")
+            logger.error(f"Error in document analysis: {e}")
             return fallback_response
 
-    async def explain_schedule(
+    async def generate_test_cases(
         self,
         user_uid: str,
-        workload_preference: str,
-        pending_tasks: int,
-        overdue_tasks: int,
-        tasks: List[dict]
-    ) -> List[str]:
+        code: str,
+        language: str,
+        num_tests: int = 5
+    ) -> List[dict]:
         """
-        Generate explanations for task priority rankings
-
-        Args:
-            user_uid: Student's user ID
-            workload_preference: heavy/balanced/light
-            pending_tasks: Count of pending tasks
-            overdue_tasks: Count of overdue tasks
-            tasks: List of task dicts with title, subject, deadline, days_remaining, points, priority_score, band
-
-        Returns:
-            List of explanation strings, one per task
+        Auto generate test cases from code
         """
-        # Format tasks for prompt
-        tasks_formatted = ""
-        for i, task in enumerate(tasks[:10]):  # Limit to 10 tasks
-            tasks_formatted += f"\n{i+1}. {task.get('title', 'Untitled')}"
-            tasks_formatted += f"\n   Subject: {task.get('subject', 'N/A')}"
-            tasks_formatted += f"\n   Deadline: {task.get('deadline', 'No deadline')}"
-            tasks_formatted += f"\n   Days remaining: {task.get('days_remaining', 'N/A')}"
-            tasks_formatted += f"\n   Points: {task.get('points', 0)}"
-            tasks_formatted += f"\n   Priority: {task.get('band', 'normal')} ({task.get('priority_score', 0):.2f})"
+        code_snippet = code[:3000]
 
-        prompt = f"""STUDENT WORKLOAD: {workload_preference} preference, {pending_tasks} pending, {overdue_tasks} overdue
+        prompt = f"""Generate {num_tests} test cases for the following {language} code.
+The code is:
+```{language}
+{code_snippet}
+```
 
-PRIORITIZED TASKS (already ranked by urgency and importance):
-{tasks_formatted}
+Return ONLY a JSON array of objects with 'input' (string) and 'expected' (string) fields.
+Example:
+[
+  {{"input": "2", "expected": "4"}},
+  {{"input": "3", "expected": "9"}}
+]
 
-For each task, provide a brief 1-sentence explanation of why it's ranked at this priority level.
-
-Format as a numbered list matching the tasks:
-1. [explanation]
-2. [explanation]
-...
-
-Keep explanations concise and actionable."""
-
-        system_prompt = "You are a study advisor helping a student prioritize tasks. Be concise and practical."
-
-        # Generate fallback explanations
-        fallback_explanations = []
-        for task in tasks:
-            band = task.get("band", "normal")
-            days = task.get("days_remaining")
-            points = task.get("points", 0)
-
-            if band == "urgent":
-                explanation = f"Due soon with {points} points - prioritize immediately."
-            elif band == "high":
-                explanation = f"Important assignment worth {points} points - schedule time this week."
-            elif days is not None and days < 0:
-                explanation = "Overdue - complete as soon as possible."
-            else:
-                explanation = f"Regular priority - plan to complete by deadline."
-
-            fallback_explanations.append(explanation)
+If the function takes no arguments, input can be empty string or relevant setup.
+Ensure inputs cover edge cases.
+"""
+        system_prompt = "You are a QA engineer generating test cases. Output valid JSON only."
+        
+        fallback = []
 
         try:
             response = await self.safe_call(
-                feature="schedule",
+                feature="test_generation",
                 user_uid=user_uid,
                 prompt=prompt,
                 system_prompt=system_prompt,
-                fallback="\n".join([f"{i+1}. {e}" for i, e in enumerate(fallback_explanations)]),
+                fallback="[]",
                 use_cache=True,
-                cache_ttl=3600,  # Cache for 1 hour
-                max_tokens=400,
-                temperature=0.5
+                max_tokens=1000,
+                temperature=0.3
             )
-
-            # Parse numbered list response
-            explanations = []
-            lines = response.strip().split("\n")
-            for line in lines:
-                # Remove number prefix like "1. " or "1) "
-                line = line.strip()
-                if line and line[0].isdigit():
-                    # Remove "1. " or "1) " prefix
-                    parts = line.split(". ", 1) if ". " in line else line.split(") ", 1)
-                    if len(parts) > 1:
-                        explanations.append(parts[1].strip())
-                    else:
-                        explanations.append(line)
-
-            # Pad with fallbacks if needed
-            while len(explanations) < len(tasks):
-                idx = len(explanations)
-                if idx < len(fallback_explanations):
-                    explanations.append(fallback_explanations[idx])
-                else:
-                    explanations.append("Complete by deadline.")
-
-            return explanations[:len(tasks)]
-
+             # Clean up response
+            response = response.strip()
+            if response.startswith("```json"):
+                response = response[7:]
+            if response.endswith("```"):
+                response = response[:-3]
+            response = response.strip()
+            
+            return json.loads(response)
         except Exception as e:
-            logger.error(f"Schedule explanation error: {e}")
-            return fallback_explanations
+            logger.error(f"Error generating test cases: {e}")
+            return fallback
 
-    async def chat_response(
+    async def extract_tasks_from_doc(
         self,
         user_uid: str,
-        message: str,
-        intent: str,
-        context: dict,
-        role: str = "student",
-        history: Optional[List[Dict[str, Any]]] = None,
-    ) -> str:
+        content: str
+    ) -> List[dict]:
         """
-        Generate chat response for task-focused assistant
-
-        Args:
-            user_uid: User's ID
-            message: User's message
-            intent: Detected intent (task_info, submission_status, schedule_help, general_query)
-            context: Relevant context data based on intent
-
-        Returns:
-            Assistant response string
+        Auto create tasks from document content
         """
-        normalized_role = str(role or "student").lower()
+        content_preview = content[:4000]
 
-        # Format context based on what's available
-        context_formatted = ""
+        prompt = f"""Analyze the following document and extract actionable tasks.
+Document content:
+"{content_preview}"
 
-        if "tasks" in context:
-            context_formatted += "\nTASKS:"
-            for task in context.get("tasks", [])[:5]:
-                subject = task.get("subject") or "Subject"
-                context_formatted += (
-                    f"\n- {task.get('title')}: {subject}, due {task.get('deadline', 'no deadline')}, {task.get('points', 0)} points"
-                )
+Return ONLY a JSON array of task objects with the following fields:
+- title: string (short summary)
+- description: string (details)
+- priority: "high", "medium", or "low"
+- estimated_minutes: int
 
-        if "submissions" in context:
-            context_formatted += "\nRECENT SUBMISSIONS:"
-            for sub in context.get("submissions", [])[:3]:
-                status = "graded" if sub.get("score") is not None else "pending"
-                who = f" ({sub.get('student_uid')})" if normalized_role == "teacher" and sub.get("student_uid") else ""
-                context_formatted += f"\n- {sub.get('task_title')}{who}: {status}"
-                if sub.get("score") is not None:
-                    context_formatted += f" (score: {sub.get('score')})"
-
-        if "schedule" in context:
-            context_formatted += "\nPRIORITIZED TASKS:"
-            for task in context.get("schedule", [])[:5]:
-                context_formatted += f"\n- {task.get('title')}: {task.get('band')} priority"
-
-        if "workload" in context:
-            wl = context.get("workload", {})
-            if normalized_role == "teacher":
-                context_formatted += (
-                    f"\nWORKLOAD: {wl.get('active_classrooms', 0)} classrooms, "
-                    f"{wl.get('ungraded_submissions', 0)} ungraded submissions"
-                )
-            else:
-                context_formatted += f"\nWORKLOAD: {wl.get('pending', 0)} pending, {wl.get('overdue', 0)} overdue"
-
-        if not context_formatted:
-            context_formatted = "\nNo specific context available."
-
-        history_formatted = ""
-        if history:
-            lines: List[str] = []
-            for msg in history[-8:]:
-                r = str(msg.get("role") or "")
-                c = str(msg.get("content") or "")
-                if not r or not c:
-                    continue
-                c = c.replace("\n", " ").strip()
-                if len(c) > 240:
-                    c = c[:240] + "…"
-                lines.append(f"- {r}: {c}")
-            if lines:
-                history_formatted = "\nRECENT CONVERSATION:\n" + "\n".join(lines)
-
-        is_general_intent = str(intent or "").lower() == "out_of_scope"
-
-        if is_general_intent:
-            prompt = f"""QUESTION: {message}
-
-Write plain text only (no Markdown formatting like **bold**, # headings, or tables).
-Keep it short and direct:
-1) One-sentence definition
-2) 3-5 bullet points starting with "-"
-3) A tiny code example (indent code lines with 2 spaces, no ``` fences)
+Example:
+[
+  {{"title": "Review Chapter 1", "description": "Read and summarize chapter 1", "priority": "high", "estimated_minutes": 60}}
+]
 """
-
-            system_prompt = """You are a helpful software assistant.
-Answer general software engineering questions clearly and concisely."""
-        else:
-            prompt = f"""USER ROLE: {normalized_role.upper()}
-
-USER CONTEXT:{context_formatted}
-{history_formatted}
-
-DETECTED INTENT: {intent}
-
-USER QUESTION: {message}
-
-Write plain text only (no Markdown formatting like **bold**, # headings, or tables).
-Provide a helpful, concise response with clear next steps.
-"""
-
-            system_prompt = """You are a task assistant inside a classroom task scheduling app.
-Be concise, specific, and actionable."""
-
-        if not self.is_available():
-            raise GroqServiceError("Groq client not initialized")
-
-        if not self.rate_limiter.check_limit(user_uid, "chat"):
-            raise RateLimitExceeded("Rate limit exceeded for chat. Please wait before trying again.")
+        system_prompt = "You are a project manager extracting tasks from documents. Output valid JSON only."
+        
+        fallback = []
 
         try:
-            if not self.role_quota_limiter.check_limit(normalized_role):
-                raise RateLimitExceeded("Global Groq quota exceeded for your role. Please try again later.")
-
-            response = await self._call_groq(
+            response = await self.safe_call(
+                feature="task_extraction",
+                user_uid=user_uid,
                 prompt=prompt,
                 system_prompt=system_prompt,
-                max_tokens=400 if is_general_intent else 300,
-                temperature=0.3 if is_general_intent else 0.6,
+                fallback="[]",
+                use_cache=True,
+                max_tokens=1000,
+                temperature=0.3
             )
-        except (GroqServiceError, RateLimitExceeded):
-            raise
+             # Clean up response
+            response = response.strip()
+            if response.startswith("```json"):
+                response = response[7:]
+            if response.endswith("```"):
+                response = response[:-3]
+            response = response.strip()
+            
+            return json.loads(response)
         except Exception as e:
-            raise GroqServiceError(str(e))
-
-        self.rate_limiter.record_usage(user_uid, "chat")
-        self.role_quota_limiter.record_usage(normalized_role)
-        return self._refine_chat_text(response)
-
-    def _refine_chat_text(self, text: str) -> str:
-        s = str(text or "")
-        s = s.replace("\r\n", "\n").replace("\r", "\n").strip()
-        if not s:
-            return ""
-
-        s = re.sub(r"(?m)^```.*$\n?", "", s)
-        s = re.sub(r"\*\*(.+?)\*\*", r"\1", s)
-        s = re.sub(r"(?m)^#{1,6}\s+", "", s)
-        s = "\n".join([line.rstrip() for line in s.split("\n")])
-        s = re.sub(r"\n{3,}", "\n\n", s)
-        s = re.sub(r"^(answer|response)\s*:\s*", "", s.strip(), flags=re.IGNORECASE)
-        s = re.sub(r"(?i)\b(as an ai (language )?model|as a language model)\b.*?\n", "", s)
-        s = s.strip()
-        if len(s) > 4000:
-            s = s[:4000].rstrip() + "…"
-        return s
-
-    async def analyze_extension_request(self, preprocessed_data: dict) -> dict:
-        """
-        Analyze extension request with AI workload assessment
-
-        Args:
-            preprocessed_data: Dict with task_info, extension_request, workload
-
-        Returns:
-            ExtensionAIAnalysis dict with recommendation and reasoning
-        """
-        task_info = preprocessed_data.get("task_info", {})
-        ext_request = preprocessed_data.get("extension_request", {})
-        workload = preprocessed_data.get("workload", {})
-
-        prompt = f"""Analyze this deadline extension request:
-
-TASK: {task_info.get('title', 'Unknown')}
-- Points: {task_info.get('points', 0)}
-- Current Deadline: {task_info.get('deadline', 'N/A')}
-- Type: {task_info.get('type', 'unknown')}
-
-EXTENSION REQUEST:
-- Requested Extension: {ext_request.get('days', 0)} days
-- Student's Reason: {ext_request.get('reason', 'No reason provided')}
-
-STUDENT WORKLOAD:
-- Pending Tasks: {workload.get('pending_tasks', 0)}
-- Overdue Tasks: {workload.get('overdue_tasks', 0)}
-- Upcoming Deadlines (next 7 days): {workload.get('upcoming_count', 0)}
-- Recent Submissions (last 7 days): {workload.get('recent_submissions', 0)}
-- Average Submission Time: {workload.get('avg_submission_time', 'N/A')} hours before deadline
-- Total Points at Stake: {workload.get('total_points', 0)}
-
-Provide a JSON response with:
-{{
-  "workload_score": <float 0-1, where 1=heavy workload>,
-  "recommendation": "<approve|deny|partial>",
-  "reasoning": "<detailed explanation>",
-  "risk_factors": ["<list>", "<of>", "<risk factors>"],
-  "suggested_extension_days": <int|null>
-}}
-
-Consider:
-1. Current workload intensity
-2. Legitimacy of the reason
-3. Student's submission history
-4. Number of overdue tasks
-5. Fair compromise between student needs and academic rigor"""
-
-        system_prompt = """You are an academic advisor analyzing deadline extension requests.
-Provide fair, evidence-based recommendations that balance student wellbeing with academic standards.
-Be strict but compassionate. Consider workload, but don't enable procrastination."""
-
-        fallback_response = {
-            "workload_score": 0.5,
-            "recommendation": "partial",
-            "reasoning": "Unable to generate AI analysis. Please review manually based on student's workload and reason provided.",
-            "risk_factors": ["Manual review needed"],
-            "suggested_extension_days": max(1, ext_request.get('days', 3) // 2)
-        }
-
-        try:
-            result = await self.safe_call(
-                feature="extension_analysis",
-                user_uid="system",  # Extension analysis is not user-specific for rate limiting
-                prompt=prompt,
-                system_prompt=system_prompt,
-                fallback=None,  # We'll handle fallback manually
-                use_cache=False,
-                max_tokens=400,
-                temperature=0.3  # Lower temperature for more consistent analysis
-            )
-
-            # Parse JSON response
-            import json
-            import re
-
-            # Try to extract JSON from response
-            json_match = re.search(r'\{[\s\S]*\}', result)
-            if json_match:
-                analysis = json.loads(json_match.group())
-
-                # Validate required fields
-                required_fields = ["workload_score", "recommendation", "reasoning"]
-                if all(field in analysis for field in required_fields):
-                    # Ensure workload_score is in range
-                    analysis["workload_score"] = max(0.0, min(1.0, float(analysis.get("workload_score", 0.5))))
-
-                    # Ensure recommendation is valid
-                    if analysis["recommendation"] not in ["approve", "deny", "partial"]:
-                        analysis["recommendation"] = "partial"
-
-                    # Ensure risk_factors is a list
-                    if not isinstance(analysis.get("risk_factors"), list):
-                        analysis["risk_factors"] = []
-
-                    # Create the response object
-                    from app.models.extension import ExtensionAIAnalysis
-                    return ExtensionAIAnalysis(
-                        workload_score=analysis["workload_score"],
-                        recommendation=analysis["recommendation"],
-                        reasoning=analysis["reasoning"],
-                        current_workload=workload,
-                        risk_factors=analysis.get("risk_factors", []),
-                        suggested_extension_days=analysis.get("suggested_extension_days")
-                    )
-
-            # If parsing failed, return fallback
-            logger.warning("Failed to parse extension analysis JSON, using fallback")
-            from app.models.extension import ExtensionAIAnalysis
-            return ExtensionAIAnalysis(
-                workload_score=fallback_response["workload_score"],
-                recommendation=fallback_response["recommendation"],
-                reasoning=fallback_response["reasoning"],
-                current_workload=workload,
-                risk_factors=fallback_response["risk_factors"],
-                suggested_extension_days=fallback_response["suggested_extension_days"]
-            )
-
-        except Exception as e:
-            logger.error(f"Extension analysis failed: {e}")
-            from app.models.extension import ExtensionAIAnalysis
-            return ExtensionAIAnalysis(
-                workload_score=fallback_response["workload_score"],
-                recommendation=fallback_response["recommendation"],
-                reasoning=fallback_response["reasoning"],
-                current_workload=workload,
-                risk_factors=fallback_response["risk_factors"],
-                suggested_extension_days=fallback_response["suggested_extension_days"]
-            )
-
-    def invalidate_schedule_cache(self, user_uid: str):
-        """Invalidate schedule cache for a user (call when tasks change)"""
-        # Clear all schedule-related cache entries for user
-        # This is a simple implementation - for production, use Redis with pattern matching
-        self.cache.clear_expired()
-        logger.debug(f"Schedule cache invalidated for user {user_uid}")
+            logger.error(f"Error extracting tasks: {e}")
+            return fallback
 
 
-# Global singleton instance
+# Create singleton instance
 groq_service = GroqService()
