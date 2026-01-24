@@ -595,7 +595,9 @@ Keep explanations concise and actionable."""
         user_uid: str,
         message: str,
         intent: str,
-        context: dict
+        context: dict,
+        role: str = "student",
+        history: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         """
         Generate chat response for task-focused assistant
@@ -609,20 +611,26 @@ Keep explanations concise and actionable."""
         Returns:
             Assistant response string
         """
+        normalized_role = str(role or "student").lower()
+
         # Format context based on what's available
         context_formatted = ""
 
         if "tasks" in context:
-            context_formatted += "\nUPCOMING TASKS:"
+            context_formatted += "\nTASKS:"
             for task in context.get("tasks", [])[:5]:
-                context_formatted += f"\n- {task.get('title')}: due {task.get('deadline', 'no deadline')}, {task.get('points', 0)} points"
+                subject = task.get("subject") or "Subject"
+                context_formatted += (
+                    f"\n- {task.get('title')}: {subject}, due {task.get('deadline', 'no deadline')}, {task.get('points', 0)} points"
+                )
 
         if "submissions" in context:
             context_formatted += "\nRECENT SUBMISSIONS:"
             for sub in context.get("submissions", [])[:3]:
-                status = "graded" if sub.get("score") else "pending"
-                context_formatted += f"\n- {sub.get('task_title')}: {status}"
-                if sub.get("score"):
+                status = "graded" if sub.get("score") is not None else "pending"
+                who = f" ({sub.get('student_uid')})" if normalized_role == "teacher" and sub.get("student_uid") else ""
+                context_formatted += f"\n- {sub.get('task_title')}{who}: {status}"
+                if sub.get("score") is not None:
                     context_formatted += f" (score: {sub.get('score')})"
 
         if "schedule" in context:
@@ -632,32 +640,61 @@ Keep explanations concise and actionable."""
 
         if "workload" in context:
             wl = context.get("workload", {})
-            context_formatted += f"\nWORKLOAD: {wl.get('pending', 0)} pending, {wl.get('overdue', 0)} overdue"
+            if normalized_role == "teacher":
+                context_formatted += (
+                    f"\nWORKLOAD: {wl.get('active_classrooms', 0)} classrooms, "
+                    f"{wl.get('ungraded_submissions', 0)} ungraded submissions"
+                )
+            else:
+                context_formatted += f"\nWORKLOAD: {wl.get('pending', 0)} pending, {wl.get('overdue', 0)} overdue"
 
         if not context_formatted:
             context_formatted = "\nNo specific context available."
 
-        prompt = f"""STUDENT CONTEXT:{context_formatted}
+        history_formatted = ""
+        if history:
+            lines: List[str] = []
+            for msg in history[-8:]:
+                r = str(msg.get("role") or "")
+                c = str(msg.get("content") or "")
+                if not r or not c:
+                    continue
+                c = c.replace("\n", " ").strip()
+                if len(c) > 240:
+                    c = c[:240] + "…"
+                lines.append(f"- {r}: {c}")
+            if lines:
+                history_formatted = "\nRECENT CONVERSATION:\n" + "\n".join(lines)
+
+        prompt = f"""USER ROLE: {normalized_role.upper()}
+
+USER CONTEXT:{context_formatted}
+{history_formatted}
 
 DETECTED INTENT: {intent}
 
-STUDENT QUESTION: {message}
+USER QUESTION: {message}
 
 Provide a helpful, concise response. If the question is outside your scope (task management), politely redirect to task-related queries.
 
 Keep response under 200 words."""
 
-        system_prompt = """You are a task management assistant for students. You help with:
+        system_prompt = """You are a task management assistant inside a classroom task scheduling app.
+
+You help with:
 - Task information and deadlines
 - Submission status and grades
 - Scheduling and prioritization
+
+For teachers, focus on: tasks in their classrooms, upcoming deadlines, and submissions needing grading.
+For students, focus on: tasks assigned to them, due dates, and their submission status.
 
 You do NOT help with:
 - Course content or homework answers
 - General tutoring
 - Topics unrelated to task management
 
-Be friendly, concise, and helpful."""
+Be friendly, concise, and actionable."""
 
         fallback = "I can help you with your tasks, deadlines, and submissions. What would you like to know?"
 

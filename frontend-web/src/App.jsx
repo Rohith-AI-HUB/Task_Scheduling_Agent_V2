@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import TeacherDashboard from './pages/TeacherDashboard';
 import StudentDashboard from './pages/StudentDashboard';
+import TeacherClassrooms from './pages/TeacherClassrooms';
 import SubjectView from './pages/SubjectView';
 import TaskView from './pages/TaskView';
 import Profile from './pages/Profile';
@@ -41,6 +42,14 @@ function App() {
             element={
               <ProtectedRoute requireRole="teacher">
                 <TeacherDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/classrooms"
+            element={
+              <ProtectedRoute requireRole="teacher">
+                <TeacherClassrooms />
               </ProtectedRoute>
             }
           />

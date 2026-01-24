@@ -84,22 +84,30 @@ class ChatService:
             }
 
         # Gather context based on intent
-        context = await self._gather_context(user_uid, intent)
+        normalized_role = str(role or "student").lower()
+        context = await self._gather_context(user_uid, normalized_role, intent)
         context_used = list(context.keys())
 
         # Generate response with Groq
-        try:
-            response = await groq_service.chat_response(
-                user_uid=user_uid,
-                message=message,
-                intent=intent.value,
-                context=context
-            )
-        except RateLimitExceeded as e:
-            response = str(e)
-        except Exception as e:
-            logger.error(f"Chat response error: {e}")
-            response = self._fallback_response(intent, context)
+        history_for_llm = (self._history.get(user_uid) or [])[-10:]
+
+        if groq_service.is_available():
+            try:
+                response = await groq_service.chat_response(
+                    user_uid=user_uid,
+                    message=message,
+                    intent=intent.value,
+                    context=context,
+                    role=normalized_role,
+                    history=history_for_llm,
+                )
+            except RateLimitExceeded as e:
+                response = str(e)
+            except Exception as e:
+                logger.error(f"Chat response error: {e}")
+                response = self._fallback_response(intent, context, role=normalized_role)
+        else:
+            response = self._fallback_response(intent, context, role=normalized_role)
 
         # Store in history
         self._add_to_history(user_uid, "user", message, intent.value)
@@ -116,6 +124,7 @@ class ChatService:
     async def _gather_context(
         self,
         user_uid: str,
+        role: str,
         intent: ChatIntent
     ) -> Dict[str, Any]:
         """
@@ -133,24 +142,36 @@ class ChatService:
 
         try:
             if "tasks" in required_context or "upcoming_deadlines" in required_context:
-                context["tasks"] = await self._get_user_tasks(user_uid)
+                if role == "teacher":
+                    context["tasks"] = await self._get_teacher_tasks(user_uid)
+                else:
+                    context["tasks"] = await self._get_student_tasks(user_uid)
 
             if "submissions" in required_context or "pending_evaluations" in required_context:
-                context["submissions"] = await self._get_recent_submissions(user_uid)
+                if role == "teacher":
+                    context["submissions"] = await self._get_teacher_recent_submissions(user_uid)
+                else:
+                    context["submissions"] = await self._get_student_recent_submissions(user_uid)
 
             if "schedule" in required_context:
-                context["schedule"] = await self._get_schedule(user_uid)
+                if role == "teacher":
+                    context["schedule"] = await self._get_teacher_overview_schedule(user_uid)
+                else:
+                    context["schedule"] = await self._get_schedule(user_uid)
 
             if "workload" in required_context:
-                context["workload"] = await self._get_workload(user_uid)
+                if role == "teacher":
+                    context["workload"] = await self._get_teacher_workload(user_uid)
+                else:
+                    context["workload"] = await self._get_workload(user_uid)
 
         except Exception as e:
             logger.error(f"Error gathering context: {e}")
 
         return context
 
-    async def _get_user_tasks(self, user_uid: str, limit: int = 10) -> List[Dict]:
-        """Get user's upcoming tasks"""
+    async def _get_student_tasks(self, user_uid: str, limit: int = 10) -> List[Dict]:
+        """Get student's upcoming tasks"""
         enrollments_collection = get_collection("enrollments")
         tasks_collection = get_collection("tasks")
         subjects_collection = get_collection("subjects")
@@ -185,6 +206,7 @@ class ChatService:
         for task in tasks:
             deadline = task.get("deadline")
             result.append({
+                "task_id": str(task.get("_id")) if task.get("_id") else None,
                 "title": task.get("title", "Untitled"),
                 "subject": subject_names.get(str(task.get("subject_id")), "Unknown"),
                 "deadline": deadline.strftime("%Y-%m-%d %H:%M") if deadline else "No deadline",
@@ -194,8 +216,47 @@ class ChatService:
 
         return result
 
-    async def _get_recent_submissions(self, user_uid: str, limit: int = 5) -> List[Dict]:
-        """Get user's recent submissions"""
+    async def _get_teacher_tasks(self, teacher_uid: str, limit: int = 10) -> List[Dict]:
+        """Get teacher's tasks across their classrooms"""
+        subjects_collection = get_collection("subjects")
+        tasks_collection = get_collection("tasks")
+
+        subjects = await subjects_collection.find({"teacher_uid": teacher_uid}).to_list(length=None)
+        subject_ids = [s.get("_id") for s in subjects if s.get("_id")]
+        if not subject_ids:
+            return []
+
+        subject_names = {str(s["_id"]): s.get("name", "Unknown") for s in subjects if s.get("_id")}
+
+        tasks = await tasks_collection.find(
+            {"subject_id": {"$in": subject_ids}}
+        ).to_list(length=None)
+
+        def _sort_key(t: dict):
+            d = t.get("deadline")
+            return (d is None, d or datetime.max)
+
+        tasks.sort(key=_sort_key)
+        tasks = tasks[:limit]
+
+        result: List[Dict[str, Any]] = []
+        for task in tasks:
+            deadline = task.get("deadline")
+            result.append(
+                {
+                    "task_id": str(task.get("_id")) if task.get("_id") else None,
+                    "title": task.get("title", "Untitled"),
+                    "subject": subject_names.get(str(task.get("subject_id")), "Unknown"),
+                    "deadline": deadline.strftime("%Y-%m-%d %H:%M") if deadline else "No deadline",
+                    "points": task.get("points", 0),
+                    "type": task.get("task_type", "general"),
+                }
+            )
+
+        return result
+
+    async def _get_student_recent_submissions(self, user_uid: str, limit: int = 5) -> List[Dict]:
+        """Get student's recent submissions"""
         submissions_collection = get_collection("submissions")
         tasks_collection = get_collection("tasks")
 
@@ -226,6 +287,47 @@ class ChatService:
 
         return result
 
+    async def _get_teacher_recent_submissions(self, teacher_uid: str, limit: int = 5) -> List[Dict]:
+        """Get most recent submissions for tasks in teacher's classrooms"""
+        subjects_collection = get_collection("subjects")
+        tasks_collection = get_collection("tasks")
+        submissions_collection = get_collection("submissions")
+
+        subjects = await subjects_collection.find({"teacher_uid": teacher_uid}).to_list(length=None)
+        subject_ids = [s.get("_id") for s in subjects if s.get("_id")]
+        if not subject_ids:
+            return []
+
+        tasks = await tasks_collection.find({"subject_id": {"$in": subject_ids}}).to_list(length=None)
+        task_ids = [t.get("_id") for t in tasks if t.get("_id")]
+        if not task_ids:
+            return []
+
+        submissions = await submissions_collection.find({"task_id": {"$in": task_ids}}).sort(
+            "submitted_at", -1
+        ).limit(limit).to_list(length=limit)
+        if not submissions:
+            return []
+
+        task_titles = {str(t.get("_id")): t.get("title", "Unknown") for t in tasks if t.get("_id")}
+
+        result: List[Dict[str, Any]] = []
+        for sub in submissions:
+            evaluation = sub.get("evaluation", {}) or {}
+            score = sub.get("score")
+            status = evaluation.get("status", "pending")
+            result.append(
+                {
+                    "task_title": task_titles.get(str(sub.get("task_id")), "Unknown"),
+                    "student_uid": sub.get("student_uid"),
+                    "submitted_at": sub.get("submitted_at", datetime.utcnow()).strftime("%Y-%m-%d"),
+                    "score": score,
+                    "status": status,
+                }
+            )
+
+        return result
+
     async def _get_schedule(self, user_uid: str, limit: int = 5) -> List[Dict]:
         """Get user's prioritized task schedule"""
         from app.ai.task_scheduler import TaskScheduler
@@ -246,6 +348,23 @@ class ChatService:
 
         return result
 
+    async def _get_teacher_overview_schedule(self, teacher_uid: str, limit: int = 5) -> List[Dict]:
+        """Lightweight teacher 'schedule' based on upcoming task deadlines."""
+        tasks = await self._get_teacher_tasks(teacher_uid, limit=limit)
+        result: List[Dict[str, Any]] = []
+        for t in tasks[:limit]:
+            deadline = t.get("deadline") or "No deadline"
+            result.append(
+                {
+                    "title": t.get("title", "Untitled"),
+                    "deadline": deadline,
+                    "points": t.get("points", 0),
+                    "priority": None,
+                    "band": "normal",
+                }
+            )
+        return result
+
     async def _get_workload(self, user_uid: str) -> Dict[str, Any]:
         """Get user's current workload metrics"""
         from app.ai.context_manager import ContextManager
@@ -259,27 +378,62 @@ class ChatService:
             "due_soon": workload.get("due_soon_count", 0)
         }
 
-    def _fallback_response(self, intent: ChatIntent, context: Dict) -> str:
+    async def _get_teacher_workload(self, teacher_uid: str) -> Dict[str, Any]:
+        """Get teacher workload metrics (e.g., ungraded submissions)."""
+        subjects_collection = get_collection("subjects")
+        tasks_collection = get_collection("tasks")
+        submissions_collection = get_collection("submissions")
+
+        subjects = await subjects_collection.find({"teacher_uid": teacher_uid}).to_list(length=None)
+        subject_ids = [s.get("_id") for s in subjects if s.get("_id")]
+        if not subject_ids:
+            return {"ungraded_submissions": 0, "active_classrooms": 0}
+
+        tasks = await tasks_collection.find({"subject_id": {"$in": subject_ids}}).to_list(length=None)
+        task_ids = [t.get("_id") for t in tasks if t.get("_id")]
+        if not task_ids:
+            return {"ungraded_submissions": 0, "active_classrooms": len(subject_ids)}
+
+        ungraded = await submissions_collection.count_documents(
+            {"task_id": {"$in": task_ids}, "score": None}
+        )
+
+        return {"ungraded_submissions": int(ungraded), "active_classrooms": len(subject_ids)}
+
+    def _fallback_response(self, intent: ChatIntent, context: Dict, role: str) -> str:
         """Generate a fallback response without Groq"""
-        if intent == ChatIntent.TASK_INFO:
+        tasks = context.get("tasks", []) or []
+        submissions = context.get("submissions", []) or []
+        workload = context.get("workload", {}) or {}
+
+        if intent == ChatIntent.TASK_INFO or intent == ChatIntent.GENERAL_QUERY:
             tasks = context.get("tasks", [])
             if tasks:
                 task_list = "\n".join([
-                    f"- {t['title']}: due {t['deadline']}, {t['points']} points"
+                    f"- {t.get('title', 'Untitled')} ({t.get('subject', 'Subject')}): due {t.get('deadline', 'No deadline')}, {t.get('points', 0)} points"
                     for t in tasks[:5]
                 ])
                 return f"Here are your upcoming tasks:\n{task_list}"
+            if role == "teacher":
+                return "I couldn't find any tasks in your classrooms yet. Create a classroom and add tasks, then ask me again."
             return "You don't have any upcoming tasks."
 
         elif intent == ChatIntent.SUBMISSION_STATUS:
             submissions = context.get("submissions", [])
             if submissions:
                 sub_list = "\n".join([
-                    f"- {s['task_title']}: {'graded' if s['score'] else 'pending'}"
-                    + (f" (score: {s['score']})" if s['score'] else "")
+                    (
+                        f"- {s.get('task_title', 'Task')}: "
+                        f"{'graded' if s.get('score') is not None else 'pending'}"
+                        + (f" (score: {s.get('score')})" if s.get('score') is not None else "")
+                    )
                     for s in submissions[:5]
                 ])
                 return f"Here are your recent submissions:\n{sub_list}"
+            if role == "teacher":
+                ungraded = workload.get("ungraded_submissions")
+                if isinstance(ungraded, int) and ungraded > 0:
+                    return f"You have {ungraded} submissions that still need grading. Open a task to review submissions."
             return "You don't have any recent submissions."
 
         elif intent == ChatIntent.SCHEDULE_HELP:
@@ -292,6 +446,16 @@ class ChatService:
                 return f"Based on your deadlines and points, here's what you should prioritize:\n{task_list}"
             return "You don't have any pending tasks to prioritize."
 
+        if role == "teacher":
+            ungraded = workload.get("ungraded_submissions")
+            if isinstance(ungraded, int) and ungraded > 0:
+                return f"You have {ungraded} submissions waiting to be graded. Ask: “show my ungraded submissions” or “what tasks are due soon?”"
+            return "Ask me about tasks in your classrooms, deadlines, or submissions to grade."
+
+        pending = workload.get("pending")
+        overdue = workload.get("overdue")
+        if isinstance(pending, int) or isinstance(overdue, int):
+            return f"Ask me about your tasks and deadlines. Right now: pending={pending or 0}, overdue={overdue or 0}."
         return "I can help you with your tasks, deadlines, and submissions. What would you like to know?"
 
     def _add_to_history(
@@ -327,6 +491,12 @@ class ChatService:
 
 
 # Factory function
+_CHAT_SERVICE_INSTANCE: Optional[ChatService] = None
+
+
 def get_chat_service(db: AsyncIOMotorDatabase) -> ChatService:
     """Get chat service instance with database connection"""
-    return ChatService(db)
+    global _CHAT_SERVICE_INSTANCE
+    if _CHAT_SERVICE_INSTANCE is None:
+        _CHAT_SERVICE_INSTANCE = ChatService(db)
+    return _CHAT_SERVICE_INSTANCE

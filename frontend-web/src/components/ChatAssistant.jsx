@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import aiService from '../services/aiService';
 
-const ChatAssistant = () => {
+const ChatAssistant = ({ height = 600, minimizedHeight = 64, className = '' } = {}) => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -157,28 +157,27 @@ const ChatAssistant = () => {
 
   return (
     <div
-      className={`w-full bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-[#eae6f4] dark:border-slate-800 flex flex-col overflow-hidden transition-all ${
-        isMinimized ? 'h-16' : 'h-[600px]'
-      }`}
+      className={`w-full bg-white rounded-xl shadow-sm border border-[#eae6f4] flex flex-col overflow-hidden transition-all ${className}`}
+      style={{ height: isMinimized ? minimizedHeight : height }}
     >
       {/* Header */}
-      <div className="px-4 py-3 bg-gradient-to-r from-primary/5 to-primary/10 dark:from-primary/10 dark:to-primary/20 border-b border-[#eae6f4] dark:border-slate-800 flex items-center justify-between">
+      <div className="px-4 py-3 bg-gradient-to-r from-primary/5 to-primary/10 border-b border-[#eae6f4] flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="size-10 flex items-center justify-center bg-primary rounded-lg shadow-sm">
             <span className="material-symbols-outlined text-white text-[20px]">smart_toy</span>
           </div>
           <div className="flex flex-col">
-            <h2 className="text-[#110d1c] dark:text-white text-base font-bold leading-tight">
+            <h2 className="text-[#110d1c] text-base font-bold leading-tight">
               AI Assistant
             </h2>
-            <p className="text-[#5d479e] dark:text-slate-400 text-xs">
+            <p className="text-[#5d479e] text-xs">
               Task management help
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button
-            className="size-8 flex items-center justify-center rounded-lg hover:bg-white/50 dark:hover:bg-slate-800 text-[#5d479e] dark:text-slate-400"
+            className="size-8 flex items-center justify-center rounded-lg hover:bg-white/50 text-[#5d479e]"
             onClick={handleClearHistory}
             disabled={messages.length === 0}
             type="button"
@@ -187,7 +186,7 @@ const ChatAssistant = () => {
             <span className="material-symbols-outlined text-[18px]">delete</span>
           </button>
           <button
-            className="size-8 flex items-center justify-center rounded-lg hover:bg-white/50 dark:hover:bg-slate-800 text-[#5d479e] dark:text-slate-400"
+            className="size-8 flex items-center justify-center rounded-lg hover:bg-white/50 text-[#5d479e]"
             onClick={() => setIsMinimized(!isMinimized)}
             type="button"
             title={isMinimized ? 'Expand' : 'Minimize'}
@@ -202,24 +201,24 @@ const ChatAssistant = () => {
       {!isMinimized && (
         <>
           {/* Credits Display */}
-          <div className="px-4 py-3 border-b border-[#eae6f4] dark:border-slate-800">
+          <div className="px-4 py-3 border-b border-[#eae6f4]">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-[#5d479e] dark:text-slate-400">
+              <span className="text-xs font-medium text-[#5d479e]">
                 Messages Today
               </span>
               <span
                 className={`text-xs font-bold ${
                   isOutOfCredits
-                    ? 'text-red-600 dark:text-red-400'
+                    ? 'text-red-600'
                     : isLowCredits
-                    ? 'text-orange-600 dark:text-orange-400'
-                    : 'text-primary dark:text-primary'
+                    ? 'text-orange-600'
+                    : 'text-primary'
                 }`}
               >
                 {creditsDisplay}
               </span>
             </div>
-            <div className="w-full bg-[#eae6f4] dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+            <div className="w-full bg-[#eae6f4] h-2 rounded-full overflow-hidden">
               <div
                 className={`h-full transition-all ${
                   isOutOfCredits
@@ -232,13 +231,13 @@ const ChatAssistant = () => {
               ></div>
             </div>
             {isLowCredits && (
-              <p className="text-xs text-orange-600 dark:text-orange-400 mt-2 flex items-center gap-1">
+              <p className="text-xs text-orange-600 mt-2 flex items-center gap-1">
                 <span className="material-symbols-outlined text-[14px]">warning</span>
                 Low credits remaining
               </p>
             )}
             {isOutOfCredits && (
-              <p className="text-xs text-red-600 dark:text-red-400 mt-2 flex items-center gap-1">
+              <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
                 <span className="material-symbols-outlined text-[14px]">error</span>
                 Daily limit reached. Resets at midnight UTC.
               </p>
@@ -250,7 +249,7 @@ const ChatAssistant = () => {
             <style>{`.custom-scrollbar::-webkit-scrollbar{width:6px}.custom-scrollbar::-webkit-scrollbar-track{background:transparent}.custom-scrollbar::-webkit-scrollbar-thumb{background:#d5cee9;border-radius:10px}`}</style>
 
             {isLoading ? (
-              <div className="flex items-center justify-center h-full text-[#5d479e] dark:text-slate-400 text-sm">
+              <div className="flex items-center justify-center h-full text-[#5d479e] text-sm">
                 <div className="flex items-center gap-2">
                   <span className="material-symbols-outlined animate-spin">sync</span>
                   Loading chat...
@@ -258,15 +257,15 @@ const ChatAssistant = () => {
               </div>
             ) : messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center">
-                <div className="size-16 flex items-center justify-center bg-primary/10 dark:bg-primary/20 rounded-full mb-3">
+                <div className="size-16 flex items-center justify-center bg-primary/10 rounded-full mb-3">
                   <span className="material-symbols-outlined text-primary text-[32px]">
                     chat_bubble
                   </span>
                 </div>
-                <p className="text-[#110d1c] dark:text-white font-semibold mb-1">
+                <p className="text-[#110d1c] font-semibold mb-1">
                   Start a conversation
                 </p>
-                <p className="text-[#5d479e] dark:text-slate-400 text-sm max-w-xs">
+                <p className="text-[#5d479e] text-sm max-w-xs">
                   Ask about your tasks, deadlines, submissions, or scheduling help.
                 </p>
               </div>
@@ -279,7 +278,7 @@ const ChatAssistant = () => {
                   }`}
                 >
                   {msg.role === 'assistant' && (
-                    <div className="size-8 shrink-0 flex items-center justify-center bg-primary/10 dark:bg-primary/20 rounded-lg">
+                    <div className="size-8 shrink-0 flex items-center justify-center bg-primary/10 rounded-lg">
                       <span className="material-symbols-outlined text-primary text-[16px]">
                         smart_toy
                       </span>
@@ -289,7 +288,7 @@ const ChatAssistant = () => {
                     className={`max-w-[80%] rounded-lg px-4 py-2 ${
                       msg.role === 'user'
                         ? 'bg-primary text-white'
-                        : 'bg-[#f1eff7] dark:bg-slate-800 text-[#110d1c] dark:text-slate-100'
+                        : 'bg-[#f1eff7] text-[#110d1c]'
                     }`}
                   >
                     <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
@@ -297,7 +296,7 @@ const ChatAssistant = () => {
                       className={`text-xs mt-1 ${
                         msg.role === 'user'
                           ? 'text-white/70'
-                          : 'text-[#5d479e] dark:text-slate-500'
+                          : 'text-[#5d479e]'
                       }`}
                     >
                       {formatTimestamp(msg.timestamp)}
@@ -321,7 +320,7 @@ const ChatAssistant = () => {
 
           {/* Error Display */}
           {error && (
-            <div className="mx-4 mb-3 p-3 bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/50 rounded-lg text-red-600 dark:text-red-400 text-sm flex items-start gap-2">
+            <div className="mx-4 mb-3 p-3 bg-red-50 border border-red-100 rounded-lg text-red-600 text-sm flex items-start gap-2">
               <span className="material-symbols-outlined text-[16px] mt-0.5">error</span>
               <span>{error}</span>
             </div>
@@ -330,7 +329,7 @@ const ChatAssistant = () => {
           {/* Input Area */}
           <form
             onSubmit={handleSendMessage}
-            className="p-4 border-t border-[#eae6f4] dark:border-slate-800 bg-background-light/50 dark:bg-slate-800/50"
+            className="p-4 border-t border-[#eae6f4] bg-background-light/50"
           >
             <div className="flex gap-2">
               <input
@@ -345,7 +344,7 @@ const ChatAssistant = () => {
                 }
                 disabled={isSending || isOutOfCredits}
                 maxLength={500}
-                className="flex-1 px-4 py-2 rounded-lg border border-[#eae6f4] dark:border-slate-700 bg-white dark:bg-slate-900 text-[#110d1c] dark:text-white placeholder-[#5d479e] dark:placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="flex-1 px-4 py-2 rounded-lg border border-[#eae6f4] bg-white text-[#110d1c] placeholder-[#5d479e] text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
               <button
                 type="submit"
@@ -367,7 +366,7 @@ const ChatAssistant = () => {
                 )}
               </button>
             </div>
-            <p className="text-xs text-[#5d479e] dark:text-slate-500 mt-2">
+            <p className="text-xs text-[#5d479e] mt-2">
               {inputMessage.length}/500 characters
             </p>
           </form>
