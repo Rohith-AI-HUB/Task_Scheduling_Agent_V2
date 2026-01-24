@@ -7,6 +7,7 @@ from app.database.collections import get_collection
 from app.models.dashboard import (
     DueSoonItem,
     DueSoonResponse,
+    TeacherPendingSummaryResponse,
     TeacherUpcomingTaskItem,
     TeacherUpcomingTasksResponse,
     UpcomingTaskItem,
@@ -277,3 +278,32 @@ async def teacher_upcoming(
             break
 
     return TeacherUpcomingTasksResponse(generated_at=now, items=items)
+
+
+@router.get("/teacher/pending", response_model=TeacherPendingSummaryResponse)
+async def teacher_pending(
+    response: Response,
+    current_teacher: dict = Depends(get_current_teacher),
+):
+    response.headers["Cache-Control"] = "no-store"
+
+    now = datetime.utcnow()
+
+    subjects_collection = get_collection("subjects")
+    subjects = await subjects_collection.find({"teacher_uid": current_teacher["uid"]}).to_list(length=None)
+    subject_oids = [s.get("_id") for s in subjects if s.get("_id")]
+    subject_oids = [s for s in subject_oids if isinstance(s, ObjectId)]
+    if not subject_oids:
+        return TeacherPendingSummaryResponse(generated_at=now, pending_submissions=0, total_submissions=0)
+
+    submissions_collection = get_collection("submissions")
+    total = await submissions_collection.count_documents({"subject_id": {"$in": subject_oids}})
+    pending = await submissions_collection.count_documents(
+        {"subject_id": {"$in": subject_oids}, "score": None}
+    )
+
+    return TeacherPendingSummaryResponse(
+        generated_at=now,
+        pending_submissions=int(pending or 0),
+        total_submissions=int(total or 0),
+    )

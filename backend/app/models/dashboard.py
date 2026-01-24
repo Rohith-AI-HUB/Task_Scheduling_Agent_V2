@@ -52,3 +52,9 @@ class TeacherUpcomingTaskItem(BaseModel):
 class TeacherUpcomingTasksResponse(BaseModel):
     generated_at: datetime
     items: list[TeacherUpcomingTaskItem] = Field(default_factory=list)
+
+
+class TeacherPendingSummaryResponse(BaseModel):
+    generated_at: datetime
+    pending_submissions: int = 0
+    total_submissions: int = 0

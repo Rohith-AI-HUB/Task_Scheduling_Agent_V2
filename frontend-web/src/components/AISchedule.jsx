@@ -7,20 +7,7 @@ const AISchedule = () => {
   const [schedule, setSchedule] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const inFlightRef = useRef(false);
-
-  const getErrorMessage = (err, fallback) => {
-    const detail = err?.response?.data?.detail;
-    if (typeof detail === 'string') return detail;
-    if (Array.isArray(detail) && detail.length > 0) {
-      const first = detail[0];
-      if (typeof first?.msg === 'string') return first.msg;
-      return JSON.stringify(first);
-    }
-    if (detail && typeof detail === 'object') return JSON.stringify(detail);
-    return fallback;
-  };
 
   const load = async ({ silent = false } = {}) => {
     if (inFlightRef.current) return;
@@ -28,19 +15,16 @@ const AISchedule = () => {
     if (!silent) {
       setIsLoading(true);
       setError('');
-    } else {
-      setIsRefreshing(true);
     }
     try {
       const response = await api.get('/ai/schedule');
       setSchedule(response.data);
       setError('');
     } catch (err) {
-      if (!silent) setError(getErrorMessage(err, 'Failed to load AI schedule'));
+      if (!silent) setError('Failed to load AI schedule');
     } finally {
       inFlightRef.current = false;
       setIsLoading(false);
-      setIsRefreshing(false);
     }
   };
 
@@ -48,30 +32,13 @@ const AISchedule = () => {
     load();
   }, []);
 
-  useEffect(() => {
-    const tick = () => {
-      if (document.visibilityState !== 'visible') return;
-      load({ silent: true });
-    };
-
-    const intervalId = window.setInterval(tick, 5000);
-    const onVis = () => {
-      if (document.visibilityState === 'visible') tick();
-    };
-    document.addEventListener('visibilitychange', onVis);
-    return () => {
-      window.clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', onVis);
-    };
-  }, []);
-
   const items = useMemo(() => schedule?.tasks || [], [schedule]);
 
   const stats = useMemo(() => {
-    const out = { urgent: 0, high: 0, normal: 0, low: 0 };
+    const out = { urgent: 0, high: 0, normal: 0 };
     for (const t of items) {
-      const band = t?.band;
-      if (band && Object.prototype.hasOwnProperty.call(out, band)) out[band] += 1;
+        const band = t?.band;
+        if (band && Object.prototype.hasOwnProperty.call(out, band)) out[band] += 1;
     }
     return out;
   }, [items]);
@@ -83,47 +50,10 @@ const AISchedule = () => {
     const deltaMs = Date.now() - d.getTime();
     const deltaMin = Math.floor(deltaMs / 60000);
     if (deltaMin <= 0) return 'Just now';
-    if (deltaMin === 1) return '1 min ago';
     if (deltaMin < 60) return `${deltaMin} mins ago`;
     const deltaHr = Math.floor(deltaMin / 60);
-    if (deltaHr === 1) return '1 hour ago';
     if (deltaHr < 24) return `${deltaHr} hours ago`;
-    const deltaDay = Math.floor(deltaHr / 24);
-    if (deltaDay === 1) return '1 day ago';
-    return `${deltaDay} days ago`;
-  };
-
-  const rowUi = (band) => {
-    if (band === 'urgent') {
-      return {
-        scoreCls: 'bg-primary text-white',
-        icon: { name: 'error', cls: 'text-red-500', title: 'Urgent' },
-        barCls: 'bg-primary',
-        rowBorder: 'hover:border-primary',
-      };
-    }
-    if (band === 'high') {
-      return {
-        scoreCls: 'bg-primary/20 text-primary dark:bg-primary/30 dark:text-white',
-        icon: { name: 'warning', cls: 'text-orange-500', title: 'High Priority' },
-        barCls: 'bg-primary/60',
-        rowBorder: 'hover:border-primary',
-      };
-    }
-    if (band === 'normal') {
-      return {
-        scoreCls: 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-slate-300',
-        icon: { name: 'fiber_manual_record', cls: 'text-primary/40', title: 'Normal' },
-        barCls: 'bg-primary/30',
-        rowBorder: 'hover:border-primary',
-      };
-    }
-    return {
-      scoreCls: 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-slate-300',
-      icon: { name: 'low_priority', cls: 'text-primary/40', title: 'Low' },
-      barCls: 'bg-primary/30',
-      rowBorder: 'hover:border-primary',
-    };
+    return '1 day+ ago';
   };
 
   const formatDeadline = (deadline) => {
@@ -134,123 +64,92 @@ const AISchedule = () => {
   };
 
   return (
-    <div className="w-full h-fit bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-[#eae6f4] dark:border-slate-800 flex flex-col overflow-hidden">
-      <style>{`.custom-scrollbar::-webkit-scrollbar{width:4px}.custom-scrollbar::-webkit-scrollbar-track{background:transparent}.custom-scrollbar::-webkit-scrollbar-thumb{background:#d5cee9;border-radius:10px}`}</style>
-
-      <div className="px-4 pt-5 pb-3 flex flex-col gap-1">
-        <div className="flex items-center justify-between">
-          <h2 className="text-[#110d1c] dark:text-white text-lg font-bold leading-tight tracking-[-0.015em]">
-            AI Schedule
-          </h2>
-          <div className="flex gap-1">
-            <button
-              className="size-8 flex items-center justify-center rounded-lg hover:bg-background-light dark:hover:bg-slate-800 text-[#5d479e] dark:text-slate-400 disabled:opacity-60"
-              onClick={() => load({ silent: false })}
-              disabled={isLoading}
-              type="button"
-            >
-              <span className="material-symbols-outlined text-[18px]">sync</span>
-            </button>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span
-            className={`flex h-2 w-2 rounded-full ${
-              error ? 'bg-red-500' : isRefreshing ? 'bg-primary' : 'bg-green-500'
-            }`}
-          ></span>
-          <p className="text-[#5d479e] dark:text-slate-400 text-xs font-medium uppercase tracking-wider">
-            {error ? 'AI Error' : 'AI Optimized'} • {formatRelative(schedule?.generated_at) || '—'}
-          </p>
-        </div>
-        {error ? (
-          <div className="mt-3 p-3 bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/50 rounded-lg text-red-600 dark:text-red-400 text-sm">
-            {error}
-          </div>
-        ) : null}
+    <div className="bento-card p-6 flex flex-col h-full">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+          <span className="material-symbols-outlined text-primary">auto_awesome</span>
+          AI Schedule
+        </h2>
+        <button
+          className={`size-9 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-500 transition-colors ${isLoading ? 'animate-spin' : ''}`}
+          onClick={() => load({ silent: false })}
+          title="Refresh"
+          type="button"
+        >
+          <span className="material-symbols-outlined text-[18px]">sync</span>
+        </button>
       </div>
 
-      <div className="px-4 py-3 flex gap-2 border-b border-[#eae6f4] dark:border-slate-800">
-        <div className="flex-1 flex flex-col gap-0.5 p-2 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/50">
-          <span className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase">Urgent</span>
-          <span className="text-lg font-bold text-red-700 dark:text-red-300">{stats.urgent}</span>
+      <div className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 mb-4 text-slate-500">
+        <span className={`w-2 h-2 rounded-full ${error ? 'bg-red-500' : 'bg-green-500'}`}></span>
+        {error ? 'Error' : 'AI optimized'}
+        <span className="opacity-60">•</span>
+        <span className="truncate">{formatRelative(schedule?.generated_at)?.toUpperCase() || 'UNKNOWN'}</span>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="bg-red-50 p-3 rounded-2xl border border-red-100">
+          <p className="text-[9px] font-bold text-red-600 uppercase tracking-wider mb-1">Urgent</p>
+          <p className="text-2xl font-bold text-red-700">{stats.urgent}</p>
         </div>
-        <div className="flex-1 flex flex-col gap-0.5 p-2 rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-100 dark:border-orange-900/50">
-          <span className="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase">High</span>
-          <span className="text-lg font-bold text-orange-700 dark:text-orange-300">{stats.high}</span>
+        <div className="bg-orange-50 p-3 rounded-2xl border border-orange-100">
+          <p className="text-[9px] font-bold text-orange-600 uppercase tracking-wider mb-1">High</p>
+          <p className="text-2xl font-bold text-orange-700">{stats.high}</p>
         </div>
-        <div className="flex-1 flex flex-col gap-0.5 p-2 rounded-lg bg-primary/5 dark:bg-primary/10 border border-primary/10 dark:border-primary/20">
-          <span className="text-[10px] font-bold text-primary dark:text-primary/80 uppercase">Normal</span>
-          <span className="text-lg font-bold text-primary dark:text-white">{stats.normal}</span>
+        <div className="bg-indigo-50 p-3 rounded-2xl border border-indigo-100">
+          <p className="text-[9px] font-bold text-indigo-600 uppercase tracking-wider mb-1">Normal</p>
+          <p className="text-2xl font-bold text-indigo-700">{stats.normal}</p>
         </div>
       </div>
 
-      <div className="flex flex-col custom-scrollbar overflow-y-auto max-h-[500px]">
-        {isLoading ? (
-          <div className="p-4 text-[#5d479e] dark:text-slate-400 text-sm">Loading schedule...</div>
+      <div className="flex-1 overflow-y-auto min-h-[160px] space-y-3 mb-4 pr-1 custom-scrollbar">
+        {isLoading && !schedule ? (
+          <div className="text-center text-slate-500 text-sm py-10">Loading schedule...</div>
         ) : items.length === 0 ? (
-          <div className="p-4 text-[#5d479e] dark:text-slate-400 text-sm">No pending tasks to schedule.</div>
+          <div className="text-center text-slate-500 text-sm py-10">No tasks scheduled.</div>
         ) : (
-          items.map((row) => {
+          items.slice(0, 5).map((row, idx) => {
             const task = row?.task;
-            if (!task?.id) return null;
-            const pct = Math.round((Number(row?.priority || 0) || 0) * 100);
-            const ui = rowUi(row?.band);
+            if (!task) return null;
+            const isUrgent = row.band === 'urgent';
+            const isHigh = row.band === 'high';
+            const iconColor = isUrgent ? 'text-red-500' : isHigh ? 'text-orange-500' : 'text-primary';
+            const icon = isUrgent ? 'error' : isHigh ? 'warning' : 'fiber_manual_record';
+
             return (
-              <div
-                key={task.id}
-                className={`group flex items-start gap-3 p-4 border-l-4 border-transparent transition-all cursor-pointer border-b border-[#f1eff7] dark:border-slate-800 ${ui.rowBorder}`}
+              <button
+                key={task.id || idx}
+                className="w-full text-left p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-white hover:border-primary/30 transition-colors"
                 onClick={() => navigate(`/task/${task.id}`)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    navigate(`/task/${task.id}`);
-                  }
-                }}
+                type="button"
               >
-                <div className={`shrink-0 flex flex-col items-center justify-center size-10 rounded font-bold text-sm shadow-sm ${ui.scoreCls}`}>
-                  {pct}
-                </div>
-                <div className="flex flex-col flex-1 min-w-0">
-                  <div className="flex justify-between items-start gap-2">
-                    <p className="text-[#110d1c] dark:text-slate-100 text-sm font-semibold truncate">{task.title || 'Task'}</p>
-                    <span
-                      className={`material-symbols-outlined ${ui.icon.cls} text-[14px] shrink-0`}
-                      title={ui.icon.title}
-                    >
-                      {ui.icon.name}
-                    </span>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-bold text-primary">{Math.round(Number(row.priority) * 100)}</span>
+                      <p className="font-bold text-sm text-slate-800 truncate">{task.title}</p>
+                    </div>
+                    <p className="text-[11px] text-slate-500 truncate">
+                      Due {formatDeadline(task.deadline)} {typeof task.points === 'number' ? `• ${task.points} pts` : ''}
+                    </p>
                   </div>
-                  <p className="text-[#5d479e] dark:text-slate-400 text-xs mt-0.5">
-                    {formatDeadline(task.deadline) ? `Due ${formatDeadline(task.deadline)}` : 'No deadline'}
-                    {typeof task.points === 'number' ? ` • ${task.points} pts` : ''}
-                  </p>
-                  <div className="mt-2 w-full bg-[#eae6f4] dark:bg-slate-700 h-1 rounded-full overflow-hidden">
-                    <div className={`${ui.barCls} h-full`} style={{ width: `${pct}%` }}></div>
-                  </div>
+                  <span className={`material-symbols-outlined ${iconColor} text-[18px]`}>{icon}</span>
                 </div>
-              </div>
+              </button>
             );
           })
         )}
       </div>
 
-      <div className="p-3 bg-background-light/50 dark:bg-slate-800/50 flex justify-center">
-        <button
-          className="flex items-center gap-2 text-primary dark:text-primary hover:text-primary/80 text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-60"
-          onClick={() => load({ silent: false })}
-          disabled={isLoading}
-          type="button"
-        >
-          View Full Schedule
-          <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
-        </button>
-      </div>
+      <button
+        className="w-full rounded-lg py-2 text-sm font-bold text-primary hover:bg-primary/5 transition-colors mt-auto"
+        onClick={() => navigate('/calendar')}
+        type="button"
+      >
+        View Calendar
+      </button>
     </div>
   );
 };
 
 export default AISchedule;
-

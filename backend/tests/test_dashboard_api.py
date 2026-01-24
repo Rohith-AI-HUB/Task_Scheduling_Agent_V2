@@ -29,24 +29,24 @@ class _FakeCollection:
     def __init__(self, docs: list[dict] | None = None):
         self._docs = list(docs or [])
 
-    def find(self, query: dict):
-        def matches(doc: dict) -> bool:
-            for k, v in query.items():
-                if isinstance(v, dict):
-                    if "$in" in v and doc.get(k) not in set(v["$in"]):
-                        return False
-                    if "$ne" in v and doc.get(k) == v["$ne"]:
-                        return False
-                    if "$gte" in v and (doc.get(k) is None or doc.get(k) < v["$gte"]):
-                        return False
-                    if "$lte" in v and (doc.get(k) is None or doc.get(k) > v["$lte"]):
-                        return False
-                    continue
-                if doc.get(k) != v:
+    def _matches(self, doc: dict, query: dict) -> bool:
+        for k, v in query.items():
+            if isinstance(v, dict):
+                if "$in" in v and doc.get(k) not in set(v["$in"]):
                     return False
-            return True
+                if "$ne" in v and doc.get(k) == v["$ne"]:
+                    return False
+                if "$gte" in v and (doc.get(k) is None or doc.get(k) < v["$gte"]):
+                    return False
+                if "$lte" in v and (doc.get(k) is None or doc.get(k) > v["$lte"]):
+                    return False
+                continue
+            if doc.get(k) != v:
+                return False
+        return True
 
-        return _FakeCursor([d for d in self._docs if matches(d)])
+    def find(self, query: dict):
+        return _FakeCursor([d for d in self._docs if self._matches(d, query)])
 
     async def find_one(self, query: dict, sort=None):
         for d in self._docs:
@@ -58,6 +58,9 @@ class _FakeCollection:
             if ok:
                 return d
         return None
+
+    async def count_documents(self, query: dict):
+        return sum(1 for d in self._docs if self._matches(d, query))
 
 
 @pytest.mark.asyncio
@@ -283,3 +286,58 @@ async def test_teacher_upcoming_includes_teacher_tasks(monkeypatch):
         ids = [row["task_id"] for row in body["items"]]
         assert str(upcoming) in ids
         assert str(far) not in ids
+
+
+@pytest.mark.asyncio
+async def test_teacher_pending_counts_ungraded_submissions(monkeypatch):
+    now = datetime.utcnow()
+    teacher_uid = "t1"
+    subject_id = ObjectId()
+    other_subject_id = ObjectId()
+
+    subjects = _FakeCollection(
+        [
+            {"_id": subject_id, "teacher_uid": teacher_uid, "name": "Math"},
+            {"_id": other_subject_id, "teacher_uid": "t2", "name": "Other"},
+        ]
+    )
+    submissions = _FakeCollection(
+        [
+            {"_id": ObjectId(), "subject_id": subject_id, "score": None, "submitted_at": now},
+            {"_id": ObjectId(), "subject_id": subject_id, "score": 10, "submitted_at": now},
+            {"_id": ObjectId(), "subject_id": other_subject_id, "score": None, "submitted_at": now},
+        ]
+    )
+    tasks = _FakeCollection([])
+    enrollments = _FakeCollection([])
+    groups = _FakeCollection([])
+
+    def fake_get_collection(name: str):
+        if name == "subjects":
+            return subjects
+        if name == "submissions":
+            return submissions
+        if name == "tasks":
+            return tasks
+        if name == "enrollments":
+            return enrollments
+        if name == "groups":
+            return groups
+        raise AssertionError(f"Unexpected collection: {name}")
+
+    monkeypatch.setattr("app.api.dashboard.get_collection", fake_get_collection)
+
+    app = FastAPI()
+    app.include_router(dashboard_api.router, prefix="/api/dashboard")
+
+    async def override_current_teacher():
+        return {"uid": teacher_uid, "role": "teacher"}
+
+    app.dependency_overrides[dependencies.get_current_teacher] = override_current_teacher
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.get("/api/dashboard/teacher/pending")
+        assert res.status_code == 200
+        body = res.json()
+        assert body["pending_submissions"] == 1
+        assert body["total_submissions"] == 2

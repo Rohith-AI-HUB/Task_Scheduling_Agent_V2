@@ -9,6 +9,23 @@ const TeacherClassrooms = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [copyState, setCopyState] = useState({ id: null, copiedAt: 0 });
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [createData, setCreateData] = useState({ name: '', code: '' });
+  const [createError, setCreateError] = useState('');
+
+  const loadSubjects = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.get('/subjects');
+      setSubjects(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Failed to load classrooms');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -33,6 +50,23 @@ const TeacherClassrooms = () => {
       cancelled = true;
     };
   }, []);
+
+  const handleCreateSubject = async () => {
+    const name = String(createData?.name || '').trim();
+    if (!name) return;
+    setIsCreating(true);
+    setCreateError('');
+    try {
+      await api.post('/subjects', { name, code: createData?.code ? String(createData.code).trim() : null });
+      await loadSubjects();
+      setIsCreateOpen(false);
+      setCreateData({ name: '', code: '' });
+    } catch (err) {
+      setCreateError(err?.response?.data?.detail || 'Failed to create classroom');
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
   const filteredSubjects = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -105,7 +139,11 @@ const TeacherClassrooms = () => {
           </div>
           <button
             className="h-10 px-4 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90"
-            onClick={() => navigate('/teacher/dashboard')}
+            onClick={() => {
+              setCreateError('');
+              setCreateData({ name: '', code: '' });
+              setIsCreateOpen(true);
+            }}
             type="button"
           >
             Create Classroom
@@ -174,6 +212,51 @@ const TeacherClassrooms = () => {
           </div>
         )}
       </main>
+
+      {isCreateOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setIsCreateOpen(false)}
+          ></div>
+          <div className="relative w-full max-w-md rounded-xl bg-white border border-slate-200 p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-bold tracking-tight mb-2">Create Classroom</h3>
+            <p className="text-sm text-slate-500 mb-6">Students will join using the generated classroom code.</p>
+            <div className="space-y-4">
+              <input
+                value={createData.name}
+                onChange={(e) => setCreateData({ ...createData, name: e.target.value })}
+                placeholder="Subject name"
+                className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+              />
+              <input
+                value={createData.code}
+                onChange={(e) => setCreateData({ ...createData, code: e.target.value })}
+                placeholder="Subject code (e.g. CS101)"
+                className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+              />
+              {createError ? <p className="text-xs text-red-500">{createError}</p> : null}
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setIsCreateOpen(false)}
+                  className="px-4 py-2 rounded-lg font-semibold text-slate-600 hover:bg-slate-50 text-sm"
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateSubject}
+                  disabled={isCreating || !String(createData?.name || '').trim()}
+                  className="px-4 py-2 rounded-lg font-semibold bg-primary text-white hover:bg-primary/90 text-sm disabled:opacity-50"
+                  type="button"
+                >
+                  {isCreating ? 'Creating...' : 'Create Classroom'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -12,18 +12,31 @@ const DueSoon = ({ days = 7, limit = 5 }) => {
 
   const items = useMemo(() => data?.items || [], [data]);
 
-  const getErrorMessage = (err, fallback) => {
-    const detail = err?.response?.data?.detail;
-    if (typeof detail === 'string') return detail;
-    if (Array.isArray(detail) && detail.length > 0) {
-      const first = detail[0];
-      if (typeof first?.msg === 'string') return first.msg;
-      return JSON.stringify(first);
+  const load = async ({ silent = false } = {}) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    if (!silent) {
+      setIsLoading(true);
+      setError('');
+    } else {
+      setIsRefreshing(true);
     }
-    if (detail && typeof detail === 'object') return JSON.stringify(detail);
-    if (typeof err?.message === 'string' && err.message) return err.message;
-    return fallback;
+    try {
+      const response = await api.get('/dashboard/due-soon', { params: { days, limit } });
+      setData(response.data);
+      setError('');
+    } catch (err) {
+      if (!silent) setError('Failed to load tasks');
+    } finally {
+      inFlightRef.current = false;
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
   };
+
+  useEffect(() => {
+    load();
+  }, [days, limit]);
 
   const formatDue = (deadline) => {
     if (!deadline) return '';
@@ -46,124 +59,63 @@ const DueSoon = ({ days = 7, limit = 5 }) => {
     return `Due in ${days}d`;
   };
 
-  const barCls = (band) => {
-    if (band === 'urgent') return 'bg-red-500';
-    if (band === 'high') return 'bg-orange-500';
-    return 'bg-primary';
-  };
-
-  const load = async ({ silent = false } = {}) => {
-    if (inFlightRef.current) return;
-    inFlightRef.current = true;
-    if (!silent) {
-      setIsLoading(true);
-      setError('');
-    } else {
-      setIsRefreshing(true);
-    }
-    try {
-      const response = await api.get('/dashboard/due-soon', { params: { days, limit } });
-      setData(response.data);
-      setError('');
-    } catch (err) {
-      if (!silent) setError(getErrorMessage(err, 'Failed to load due soon tasks'));
-    } finally {
-      inFlightRef.current = false;
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-  }, [days, limit]);
-
-  useEffect(() => {
-    const tick = () => {
-      if (document.visibilityState !== 'visible') return;
-      load({ silent: true });
-    };
-    const intervalId = window.setInterval(tick, 5000);
-    const onVis = () => {
-      if (document.visibilityState === 'visible') tick();
-    };
-    document.addEventListener('visibilitychange', onVis);
-    return () => {
-      window.clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', onVis);
-    };
-  }, [days, limit]);
-
   return (
-    <div className="rounded-xl border border-[#d5cee9] bg-white dark:bg-white/5 dark:border-white/10 overflow-hidden">
-      <div className="bg-primary/10 px-5 py-4 border-b border-[#d5cee9] dark:border-white/10">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="flex items-center gap-2 font-bold text-primary">
-            <span className="material-symbols-outlined">priority_high</span>Due Soon
-          </h3>
-          <div className="flex items-center gap-2">
-            <span className={`flex h-2 w-2 rounded-full ${error ? 'bg-red-500' : isRefreshing ? 'bg-primary' : 'bg-green-500'}`}></span>
-            <button
-              className="text-xs font-bold text-primary hover:opacity-80 transition-opacity disabled:opacity-60"
-              onClick={() => load({ silent: false })}
-              disabled={isLoading}
-              type="button"
-            >
-              Refresh
-            </button>
-          </div>
-        </div>
-        {error ? <div className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</div> : null}
-      </div>
-
-      <div className="p-2">
-        {isLoading ? (
-          <div className="p-3 text-sm text-[#5d479e] dark:text-gray-400">Loading...</div>
-        ) : items.length === 0 ? (
-          <div className="flex items-center gap-4 p-3 rounded-lg hover:bg-background-light transition-colors dark:hover:bg-white/5">
-            <div className="h-10 w-1 bg-primary/40 rounded-full"></div>
-            <div className="flex-1">
-              <p className="text-sm font-bold dark:text-white">No tasks due soon</p>
-              <p className="text-xs text-[#5d479e] dark:text-gray-400">You’re all caught up.</p>
-            </div>
-          </div>
-        ) : (
-          items.map((it) => (
-            <div
-              key={it.task_id}
-              className="flex items-center gap-4 p-3 rounded-lg hover:bg-background-light transition-colors dark:hover:bg-white/5 cursor-pointer"
-              onClick={() => navigate(`/task/${it.task_id}`)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  navigate(`/task/${it.task_id}`);
-                }
-              }}
-            >
-              <div className={`h-10 w-1 ${barCls(it.band)} rounded-full`}></div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold dark:text-white truncate">{it.title || 'Task'}</p>
-                <p className="text-xs text-[#5d479e] dark:text-gray-400">{formatDue(it.deadline)}</p>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="p-4 border-t border-[#d5cee9] dark:border-white/10 bg-background-light/30 dark:bg-white/5">
+    <div className="bento-card p-6 flex flex-col">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+          <span className="material-symbols-outlined text-orange-500">warning</span>
+          Due Soon
+        </h3>
         <button
-          className="w-full rounded-lg py-2 text-sm font-bold text-primary hover:bg-primary/5 transition-colors"
-          onClick={() => navigate('/calendar')}
+          onClick={() => load({ silent: false })}
+          className="text-primary text-sm font-bold hover:underline flex items-center gap-2 disabled:opacity-60"
+          disabled={isLoading}
           type="button"
         >
-          See Calendar
+          <span className={`w-2 h-2 rounded-full ${error ? 'bg-red-500' : isRefreshing ? 'bg-primary' : 'bg-green-500'} ${isRefreshing ? 'animate-pulse' : ''}`}></span>
+          Refresh
         </button>
       </div>
+
+      {isLoading ? (
+        <div className="text-sm text-slate-500 py-8 text-center">Loading...</div>
+      ) : error ? (
+        <div className="text-sm text-red-600 py-6 text-center">{error}</div>
+      ) : items.length === 0 ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-6 text-center">
+          <div className="text-slate-800 font-semibold">No urgent tasks</div>
+          <div className="text-xs text-slate-500 mt-1">You're all caught up.</div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.slice(0, 3).map((item) => (
+            <button
+              key={item.task_id}
+              className="w-full text-left p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-white hover:border-primary/30 transition-colors"
+              onClick={() => navigate(`/task/${item.task_id}`)}
+              type="button"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-bold text-sm text-slate-800 truncate">{item.title}</div>
+                  <div className="text-xs text-slate-500 mt-1">{formatDue(item.deadline)}</div>
+                </div>
+                <span className="material-symbols-outlined text-orange-500 text-[18px]">event</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <button
+        className="mt-4 w-full rounded-lg py-2 text-sm font-bold text-primary hover:bg-primary/5 transition-colors"
+        onClick={() => navigate('/calendar')}
+        type="button"
+      >
+        View Calendar
+      </button>
     </div>
   );
 };
 
 export default DueSoon;
-

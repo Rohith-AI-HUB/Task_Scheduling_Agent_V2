@@ -15,6 +15,7 @@ const TeacherDashboard = () => {
   const [upcomingTasks, setUpcomingTasks] = useState([]);
   const [extensions, setExtensions] = useState([]);
   const [stats, setStats] = useState({ active: 0, enrolled: 0 });
+  const [pendingSummary, setPendingSummary] = useState({ pending: 0, total: 0 });
   const [upcomingDays, setUpcomingDays] = useState(14);
   const [subjectRoster, setSubjectRoster] = useState({});
   const subjectRosterLoadingRef = useRef({});
@@ -117,10 +118,11 @@ const TeacherDashboard = () => {
     else setIsRefreshing(true);
 
     try {
-      const [subjectsRes, upcomingRes, extensionsRes] = await Promise.allSettled([
+      const [subjectsRes, upcomingRes, extensionsRes, pendingRes] = await Promise.allSettled([
         api.get('/subjects'),
         api.get('/dashboard/teacher/upcoming', { params: { days: upcomingDays, limit: 10 } }),
-        aiService.getExtensionRequests('pending')
+        aiService.getExtensionRequests('pending'),
+        api.get('/dashboard/teacher/pending'),
       ]);
 
       // Handle Subjects
@@ -139,6 +141,12 @@ const TeacherDashboard = () => {
       // Handle Extensions
       if (extensionsRes.status === 'fulfilled') {
         setExtensions(extensionsRes.value.items || []);
+      }
+
+      if (pendingRes.status === 'fulfilled') {
+        const pending = Number(pendingRes.value.data?.pending_submissions) || 0;
+        const total = Number(pendingRes.value.data?.total_submissions) || 0;
+        setPendingSummary({ pending, total });
       }
 
       setError('');
@@ -318,13 +326,26 @@ const TeacherDashboard = () => {
             />
           </div>
           <div className="flex items-center gap-3">
-            <button className="w-10 h-10 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100">
+            <button
+              className="w-10 h-10 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100"
+              onClick={() => navigate('/calendar')}
+              title="Calendar"
+              type="button"
+            >
+              <span className="material-symbols-outlined">calendar_month</span>
+            </button>
+            <button
+              className="w-10 h-10 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100"
+              type="button"
+              title="Notifications"
+            >
               <span className="material-symbols-outlined">notifications</span>
             </button>
             <button 
               onClick={handleLogout}
               className="w-10 h-10 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100"
               title="Logout"
+              type="button"
             >
               <span className="material-symbols-outlined">logout</span>
             </button>
@@ -374,6 +395,7 @@ const TeacherDashboard = () => {
               <button 
                 onClick={() => setIsCreateOpen(true)}
                 className="bg-primary text-white px-6 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-accent-purple transition-all shadow-lg shadow-primary/20"
+                type="button"
               >
                 <span className="material-symbols-outlined">add_circle</span>
                 Create Classroom
@@ -381,6 +403,7 @@ const TeacherDashboard = () => {
               <button 
                 onClick={() => navigate('/calendar')}
                 className="bg-white text-slate-700 border border-slate-200 px-6 py-3 rounded-xl font-semibold hover:bg-slate-50 transition-all"
+                type="button"
               >
                 View Schedule
               </button>
@@ -464,13 +487,25 @@ const TeacherDashboard = () => {
               <p className="text-slate-500 text-sm mt-1">Assignments awaiting grading</p>
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-6xl font-black text-primary">--</span>
-              <span className="text-slate-600 font-medium">submissions</span>
+              <span className="text-6xl font-black text-primary">{pendingSummary.pending}</span>
+              <span className="text-slate-600 font-medium">pending</span>
             </div>
             <div className="w-full bg-slate-200 rounded-full h-2">
-              <div className="bg-primary h-2 rounded-full w-0"></div>
+              <div
+                className="bg-primary h-2 rounded-full"
+                style={{
+                  width: `${pendingSummary.total > 0 ? Math.round(((pendingSummary.total - pendingSummary.pending) / pendingSummary.total) * 100) : 0}%`,
+                }}
+              ></div>
             </div>
-            <button className="w-full py-2.5 rounded-lg border border-slate-200 text-sm font-semibold hover:bg-slate-50 transition-colors">
+            <div className="text-xs text-slate-500">
+              {pendingSummary.total > 0 ? `${pendingSummary.total - pendingSummary.pending}/${pendingSummary.total} graded` : 'No submissions yet'}
+            </div>
+            <button
+              className="w-full py-2.5 rounded-lg border border-slate-200 text-sm font-semibold hover:bg-slate-50 transition-colors"
+              onClick={() => navigate('/teacher/classrooms')}
+              type="button"
+            >
               Review All
             </button>
           </div>
@@ -599,7 +634,7 @@ const TeacherDashboard = () => {
           </div>
 
           {/* Stats */}
-          <div className="col-span-6 md:col-span-3 lg:col-span-2 row-span-2 space-y-6">
+          <div className="col-span-12 md:col-span-3 lg:col-span-2 row-span-2 space-y-6">
             <div className="h-[calc(50%-12px)] bento-card p-6 flex flex-col justify-center items-center text-center">
               <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-2 shadow-sm ring-1 ring-primary/20">
                 <span className="material-symbols-outlined text-[22px]">book</span>

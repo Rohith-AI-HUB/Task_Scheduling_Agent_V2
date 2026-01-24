@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -8,6 +8,7 @@ const SubjectView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { userRole, backendUser } = useAuth();
+  const tasksSectionRef = useRef(null);
   const [subject, setSubject] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -340,6 +341,12 @@ const SubjectView = () => {
     }
   };
 
+  const scrollToTasks = () => {
+    const el = tasksSectionRef.current || document.getElementById('subject-tasks');
+    if (!el || typeof el.scrollIntoView !== 'function') return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
     <div className="bg-background-light dark:bg-background-dark min-h-screen font-display text-[#110d1c] dark:text-white">
       {userRole === 'teacher' ? (
@@ -370,11 +377,16 @@ const SubjectView = () => {
                 <button
                   className="text-[#110d1c] dark:text-gray-300 text-sm font-medium leading-normal hover:text-primary transition-colors"
                   onClick={() => navigate('/teacher/dashboard')}
+                  type="button"
                 >
                   Dashboard
                 </button>
                 <button className="text-primary text-sm font-bold leading-normal">Subjects</button>
-                <button className="text-[#110d1c] dark:text-gray-300 text-sm font-medium leading-normal hover:text-primary transition-colors">
+                <button
+                  className="text-[#110d1c] dark:text-gray-300 text-sm font-medium leading-normal hover:text-primary transition-colors"
+                  onClick={scrollToTasks}
+                  type="button"
+                >
                   Tasks
                 </button>
               </nav>
@@ -472,7 +484,7 @@ const SubjectView = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between mb-6 gap-4">
+                <div ref={tasksSectionRef} id="subject-tasks" className="flex items-center justify-between mb-6 gap-4">
                   <div className="flex items-center gap-3">
                     <h2 className="text-[#110d1c] dark:text-white text-2xl font-bold tracking-tight">Tasks</h2>
                     <span className="px-2 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs font-bold text-gray-600 dark:text-gray-300">

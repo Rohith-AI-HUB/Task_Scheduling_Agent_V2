@@ -6,7 +6,6 @@ import aiService from '../services/aiService';
 import { logout } from '../services/authService';
 import AISchedule from '../components/AISchedule';
 import DueSoon from '../components/DueSoon';
-import UpcomingTasks from '../components/UpcomingTasks';
 import ChatAssistant from '../components/ChatAssistant';
 
 const StudentDashboard = () => {
@@ -23,26 +22,22 @@ const StudentDashboard = () => {
 
   const [subjects, setSubjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
 
   const [joinCode, setJoinCode] = useState('');
-  const [joinError, setJoinError] = useState('');
   const [isJoining, setIsJoining] = useState(false);
 
   const [extensions, setExtensions] = useState([]);
   const [extLoading, setExtLoading] = useState(true);
-  const [extError, setExtError] = useState('');
 
   const enrolledCount = useMemo(() => subjects.length, [subjects]);
 
   const loadSubjects = async () => {
     setIsLoading(true);
-    setLoadError('');
     try {
       const response = await api.get('/subjects');
       setSubjects(response.data || []);
     } catch (err) {
-      setLoadError(err?.response?.data?.detail || 'Failed to load classrooms');
+      console.error(err);
     } finally {
       setIsLoading(false);
     }
@@ -50,12 +45,11 @@ const StudentDashboard = () => {
 
   const loadExtensions = async () => {
     setExtLoading(true);
-    setExtError('');
     try {
       const data = await aiService.getExtensionRequests();
       setExtensions(data?.items || []);
     } catch (err) {
-      setExtError(err?.response?.data?.detail || 'Failed to load extension requests');
+      console.error(err);
     } finally {
       setExtLoading(false);
     }
@@ -63,9 +57,6 @@ const StudentDashboard = () => {
 
   useEffect(() => {
     loadSubjects();
-  }, []);
-
-  useEffect(() => {
     loadExtensions();
   }, []);
 
@@ -78,7 +69,6 @@ const StudentDashboard = () => {
     const value = joinCode.trim().toUpperCase();
     if (!value) return;
     setIsJoining(true);
-    setJoinError('');
     try {
       const response = await api.post('/subjects/join', { join_code: value });
       setSubjects((prev) => {
@@ -87,7 +77,7 @@ const StudentDashboard = () => {
       });
       setJoinCode('');
     } catch (err) {
-      setJoinError(err?.response?.data?.detail || 'Failed to join classroom');
+      alert(err?.response?.data?.detail || 'Failed to join classroom');
     } finally {
       setIsJoining(false);
     }
@@ -101,269 +91,230 @@ const StudentDashboard = () => {
   };
 
   return (
-    <div className="bg-background-light dark:bg-background-dark min-h-screen text-[#110d1c] dark:text-white font-display">
-      <header className="sticky top-0 z-50 w-full border-b border-[#d5cee9] bg-background-light/80 backdrop-blur-md dark:border-white/10 dark:bg-background-dark/80">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-white">
-              <span className="material-symbols-outlined">schedule</span>
+    <div className="min-h-screen bg-surface text-slate-900 font-sans antialiased">
+      <nav className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-8">
+          <div className="flex items-center gap-2">
+            <div className="bg-primary p-1.5 rounded-lg text-white">
+              <span className="material-symbols-outlined block">bolt</span>
             </div>
-            <h1 className="text-xl font-bold tracking-tight dark:text-white">Task Scheduling Agent</h1>
+            <span className="font-bold text-lg tracking-tight">Task Scheduling Agent</span>
           </div>
-          <div className="flex items-center gap-4">
-            <button className="relative flex h-10 w-10 items-center justify-center rounded-lg bg-white/50 border border-[#d5cee9] text-[#110d1c] hover:bg-white dark:bg-white/5 dark:border-white/10 dark:text-white">
-              <span className="material-symbols-outlined">notifications</span>
-              <span className="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-red-500"></span>
+          <div className="hidden lg:flex items-center gap-4 text-sm font-medium text-slate-600">
+            <button className="text-primary" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} type="button">
+              Dashboard
             </button>
-            <div className="flex items-center gap-3 pl-4 border-l border-[#d5cee9] dark:border-white/10">
-              <div className="text-right hidden sm:block">
-                <p className="text-sm font-semibold dark:text-white">{currentUser?.displayName || currentUser?.email}</p>
-                <p className="text-xs text-[#5d479e] dark:text-gray-400">ID: {currentUser?.uid?.slice(0, 6)}</p>
-              </div>
-              <button
-                className="h-10 w-10 rounded-full overflow-hidden bg-gradient-to-br from-primary/30 to-primary/10 border-2 border-primary"
-                onClick={() => navigate('/profile')}
-                type="button"
-              >
-                {backendUser?.photo_url ? (
-                  <img
-                    alt="Profile"
-                    className="h-full w-full object-cover"
-                    src={resolvePhotoUrl(backendUser.photo_url)}
-                  />
-                ) : null}
-              </button>
-              <button
-                onClick={handleLogout}
-                className="hidden md:inline-flex h-10 items-center rounded-lg bg-primary px-4 font-bold text-white hover:opacity-90 transition-opacity"
-              >
-                Logout
-              </button>
-            </div>
+            <button className="hover:text-primary" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} type="button">
+              Classrooms
+            </button>
+            <button className="hover:text-primary" onClick={() => navigate('/calendar')} type="button">
+              Schedule
+            </button>
           </div>
         </div>
-      </header>
+        <div className="flex items-center gap-3">
+          <button
+            className="w-10 h-10 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100"
+            onClick={() => navigate('/calendar')}
+            title="Calendar"
+            type="button"
+          >
+            <span className="material-symbols-outlined">calendar_month</span>
+          </button>
+          <button className="w-10 h-10 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100" title="Notifications" type="button">
+            <span className="material-symbols-outlined">notifications</span>
+          </button>
+          <button
+            className="w-9 h-9 rounded-full bg-slate-200 overflow-hidden border-2 border-white shadow-sm"
+            onClick={() => navigate('/profile')}
+            title="Profile settings"
+            type="button"
+          >
+            {backendUser?.photo_url ? (
+              <img alt="User avatar" className="w-full h-full object-cover" src={resolvePhotoUrl(backendUser.photo_url)} />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-slate-700 font-bold">
+                {(currentUser?.displayName || 'S').slice(0, 1).toUpperCase()}
+              </div>
+            )}
+          </button>
+          <button
+            onClick={handleLogout}
+            className="w-10 h-10 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100"
+            title="Logout"
+            type="button"
+          >
+            <span className="material-symbols-outlined">logout</span>
+          </button>
+        </div>
+      </nav>
 
-      <main className="mx-auto max-w-7xl px-6 py-8">
-        <nav className="mb-6 flex items-center gap-2 text-sm font-medium text-[#5d479e] dark:text-gray-400">
-          <span className="hover:text-primary cursor-pointer transition-colors" onClick={() => navigate('/student/dashboard')}>
-            Home
-          </span>
-          <span className="material-symbols-outlined text-xs">chevron_right</span>
-          <span className="text-[#110d1c] dark:text-white">Student Dashboard</span>
-        </nav>
-
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-          <div className="lg:col-span-8 flex flex-col gap-8">
-            <div className="flex flex-col gap-2">
-              <h2 className="text-3xl font-bold tracking-tight dark:text-white">
-                Welcome back{currentUser?.displayName ? `, ${currentUser.displayName.split(' ')[0]}!` : '!'}
-              </h2>
-              <p className="text-[#5d479e] dark:text-gray-400 text-lg leading-relaxed">
+      <main className="max-w-[1440px] mx-auto p-6">
+        <div className="grid grid-cols-12 gap-6">
+          <div className="col-span-12 bento-card p-8 bg-gradient-to-br from-white to-soft-purple/30 flex flex-col justify-between relative overflow-hidden">
+            <div className="relative z-10">
+              <span className="text-primary font-semibold text-sm bg-primary/10 px-3 py-1 rounded-full uppercase tracking-wider">
+                Student Portal
+              </span>
+              <h1 className="text-4xl font-bold text-slate-900 mt-4">
+                Welcome back,
+                <br />
+                {currentUser?.displayName?.split(' ')?.[0] || 'Student'}
+              </h1>
+              <p className="text-slate-500 mt-2 max-w-md">
                 You are enrolled in {enrolledCount} classroom{enrolledCount === 1 ? '' : 's'}.
               </p>
             </div>
+            <div className="flex flex-wrap gap-4 mt-6 relative z-10">
+              <button
+                onClick={() => navigate('/calendar')}
+                className="bg-primary text-white px-6 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-accent-purple transition-all shadow-lg shadow-primary/20"
+                type="button"
+              >
+                <span className="material-symbols-outlined">calendar_month</span>
+                View Schedule
+              </button>
+              <button
+                onClick={loadSubjects}
+                className="bg-white text-slate-700 border border-slate-200 px-6 py-3 rounded-xl font-semibold hover:bg-slate-50 transition-all flex items-center gap-2"
+                type="button"
+              >
+                <span className="material-symbols-outlined">sync</span>
+                Refresh Classes
+              </button>
+            </div>
+          </div>
 
-            <div className="rounded-xl border border-[#d5cee9] bg-white p-6 shadow-sm dark:bg-white/5 dark:border-white/10">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                <div className="flex-1">
-                  <h3 className="text-lg font-bold text-[#110d1c] dark:text-white">Join Classroom</h3>
-                  <p className="text-[#5d479e] dark:text-gray-400">
-                    Enter your classroom code to enroll in a new subject.
-                  </p>
-                </div>
-                <div className="flex flex-1 items-center gap-3 max-w-md">
-                  <div className="relative flex-1">
-                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#5d479e] dark:text-gray-400">
-                      key
-                    </span>
-                    <input
-                      className="h-12 w-full rounded-lg border border-[#d5cee9] bg-background-light pl-10 pr-4 text-[#110d1c] focus:border-primary focus:ring-1 focus:ring-primary dark:bg-background-dark dark:border-white/10 dark:text-white placeholder:text-[#5d479e]/50"
-                      placeholder="e.g. AB12XY"
-                      type="text"
-                      value={joinCode}
-                      onChange={(e) => {
-                        setJoinCode(e.target.value.toUpperCase());
-                        setJoinError('');
-                      }}
-                      disabled={isJoining}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleJoin();
-                      }}
-                    />
-                  </div>
-                  <button
-                    className="h-12 rounded-lg bg-primary px-8 font-bold text-white transition-all hover:opacity-90 active:scale-95 shadow-lg shadow-primary/20 disabled:opacity-60"
-                    onClick={handleJoin}
-                    disabled={!joinCode.trim() || isJoining}
-                  >
-                    {isJoining ? 'Joining' : 'Join'}
-                  </button>
-                </div>
-              </div>
-              {(joinError || loadError) && (
-                <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
-                  {joinError || loadError}
-                </div>
-              )}
+          <div className="col-span-12 lg:col-span-8 bento-card p-6 flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary">school</span>
+                Your Classrooms
+              </h3>
+              <button className="text-primary text-sm font-bold hover:underline" onClick={loadSubjects} type="button">
+                Refresh
+              </button>
             </div>
 
-            <div className="flex flex-col gap-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-[#110d1c] dark:text-white flex items-center gap-2">
-                  <span className="material-symbols-outlined text-primary">school</span>
-                  Enrolled Classrooms
-                </h3>
-                <button className="text-sm font-semibold text-primary hover:underline" onClick={loadSubjects} disabled={isLoading}>
-                  Refresh
-                </button>
+            {isLoading ? (
+              <div className="text-sm text-slate-500">Loading classrooms...</div>
+            ) : subjects.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+                No classrooms yet. Join one below.
               </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {subjects.map((sub) => (
+                  <button
+                    key={sub.id}
+                    className="border border-slate-100 bg-slate-50 rounded-xl p-5 text-left hover:border-primary/30 hover:bg-white transition-colors"
+                    onClick={() => navigate(`/subject/${sub.id}`)}
+                    type="button"
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary uppercase">
+                        {sub.code || 'CLASS'}
+                      </span>
+                      <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-1 rounded-full uppercase tracking-wider">
+                        Active
+                      </span>
+                    </div>
+                    <div className="font-bold text-slate-800 line-clamp-1">{sub.name}</div>
+                    <div className="text-xs text-slate-500 mt-1">Join code: <span className="font-mono">{sub.join_code}</span></div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-              {isLoading ? (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {Array.from({ length: 4 }).map((_, idx) => (
-                    <div
-                      key={idx}
-                      className="flex flex-col rounded-xl border border-[#d5cee9] bg-white p-5 dark:bg-white/5 dark:border-white/10"
-                    >
-                      <div className="h-12 w-12 rounded-lg bg-primary/10"></div>
-                      <div className="mt-4 h-5 w-3/4 rounded bg-[#eae6f4] dark:bg-white/10"></div>
-                      <div className="mt-2 h-4 w-1/2 rounded bg-[#eae6f4] dark:bg-white/10"></div>
-                      <div className="mt-6 h-9 w-full rounded bg-[#eae6f4] dark:bg-white/10"></div>
-                    </div>
-                  ))}
-                </div>
-              ) : subjects.length === 0 ? (
-                <div className="rounded-xl border border-[#d5cee9] bg-white p-10 text-center dark:bg-white/5 dark:border-white/10">
-                  <div className="mx-auto mb-3 h-12 w-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-                    <span className="material-symbols-outlined text-3xl">school</span>
-                  </div>
-                  <p className="font-bold text-[#110d1c] dark:text-white">No classrooms yet</p>
-                  <p className="text-xs text-[#5d479e] dark:text-gray-400 mt-2">
-                    Ask your teacher for the join code, then enter it above.
-                  </p>
-                </div>
+          <div className="col-span-12 lg:col-span-4">
+            <AISchedule />
+          </div>
+
+          <div className="col-span-12 lg:col-span-8 bento-card p-6">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary">vpn_key</span>
+                  Join Classroom
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">Enter your classroom code to enroll.</p>
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                className="flex-1 px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                placeholder="e.g. AB12XY"
+                type="text"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
+              />
+              <button
+                className="px-5 py-2 rounded-lg bg-primary text-white font-bold text-sm hover:bg-primary/90 transition-colors disabled:opacity-60"
+                onClick={handleJoin}
+                disabled={!joinCode || isJoining}
+                type="button"
+              >
+                {isJoining ? '...' : 'Join'}
+              </button>
+            </div>
+          </div>
+
+          <div className="col-span-12 lg:col-span-4">
+            <DueSoon />
+          </div>
+
+          <div className="col-span-12 lg:col-span-8 bento-card flex flex-col">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <span className="material-symbols-outlined text-amber-500">history_edu</span>
+                Extensions
+              </h3>
+              <button className="text-primary text-sm font-bold hover:underline" onClick={loadExtensions} type="button">
+                Refresh
+              </button>
+            </div>
+            <div className="p-4 space-y-3">
+              {extLoading ? (
+                <div className="text-sm text-slate-500">Loading...</div>
+              ) : extensions.length === 0 ? (
+                <div className="text-center text-slate-500 text-sm py-6">No extension requests.</div>
               ) : (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {subjects.map((subject) => (
-                    <div
-                      key={subject.id}
-                      className="group relative flex flex-col rounded-xl border border-[#d5cee9] bg-white p-5 transition-all hover:shadow-md dark:bg-white/5 dark:border-white/10"
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                          <span className="material-symbols-outlined">school</span>
-                        </div>
-                        <span className="rounded-full bg-green-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-green-700 dark:bg-green-500/20 dark:text-green-400">
-                          Active
+                extensions.slice(0, 6).map((ext) => (
+                  <div key={ext.id} className="flex items-start justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="font-bold text-sm text-slate-800 truncate">{ext.task_title || 'Task'}</div>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                          ext.status === 'approved'
+                            ? 'bg-green-100 text-green-700'
+                            : ext.status === 'denied'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-orange-100 text-orange-700'
+                        }`}>
+                          {String(ext.status || 'pending').toUpperCase()}
                         </span>
                       </div>
-                      <h4 className="text-lg font-bold dark:text-white">{subject.name}</h4>
-                      <p className="text-sm text-[#5d479e] dark:text-gray-400">
-                        Code: {subject.code || 'N/A'}
-                      </p>
-                      <div className="mt-4 flex items-center gap-2 py-3 border-t border-[#d5cee9]/50 dark:border-white/5">
-                        <div className="h-6 w-6 rounded-full bg-primary/20"></div>
-                        <p className="text-xs font-medium text-[#5d479e] dark:text-gray-400">
-                          Teacher: {subject.teacher_uid?.slice(0, 10)}
-                        </p>
+                      <div className="text-xs text-slate-500">
+                        Requested: {formatDateTime(ext.requested_deadline)}
                       </div>
-                      <div className="mt-2 flex items-center justify-between">
-                        <span className="text-xs font-mono font-bold text-[#5d479e] bg-background-light dark:bg-white/10 px-2 py-1 rounded">
-                          JOIN: {subject.join_code}
-                        </span>
-                        <button
-                          className="flex items-center gap-1 text-sm font-bold text-primary group-hover:translate-x-1 transition-transform"
-                          onClick={() => navigate(`/subject/${subject.id}`)}
-                        >
-                          Open <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                        </button>
+                      <div className="text-xs text-slate-500">
+                        Current: {formatDateTime(ext.current_deadline)}
                       </div>
                     </div>
-                  ))}
-                </div>
+                    <span className="material-symbols-outlined text-slate-300">chevron_right</span>
+                  </div>
+                ))
               )}
             </div>
           </div>
 
-          <aside className="lg:col-span-4 flex flex-col gap-6">
-            <AISchedule />
-            <ChatAssistant />
-            <DueSoon />
-            <div className="rounded-xl border border-[#d5cee9] bg-white dark:bg-white/5 dark:border-white/10 overflow-hidden">
-              <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-[#d5cee9] dark:border-white/10">
-                <h3 className="flex items-center gap-2 font-bold text-[#110d1c] dark:text-white">
-                  <span className="material-symbols-outlined">hourglass</span>My Extension Requests
-                </h3>
-                <button
-                  className="text-xs font-bold text-primary hover:opacity-80 transition-opacity disabled:opacity-60"
-                  onClick={loadExtensions}
-                  disabled={extLoading}
-                >
-                  Refresh
-                </button>
-              </div>
-              {extError ? (
-                <div className="m-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
-                  {extError}
-                </div>
-              ) : extLoading ? (
-                <div className="p-4 text-center text-[#5d479e] dark:text-gray-400 text-sm">Loading...</div>
-              ) : extensions.length === 0 ? (
-                <div className="p-6 text-center">
-                  <span className="material-symbols-outlined text-[#5d479e] dark:text-gray-500 text-[40px] mb-2">task_alt</span>
-                  <p className="text-[#110d1c] dark:text-white font-semibold">No extension requests yet</p>
-                  <p className="text-[#5d479e] dark:text-gray-400 text-sm mt-1">Submit from the task page if needed</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-[#d5cee9] dark:divide-white/10">
-                  {extensions.map((ext) => {
-                    const statusCls =
-                      ext.status === 'approved'
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
-                        : ext.status === 'denied'
-                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                        : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300';
-                    return (
-                      <div key={ext.id} className="p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <h4 className="text-sm font-bold text-[#110d1c] dark:text-white truncate">{ext.task_title || 'Task'}</h4>
-                            <p className="text-xs text-[#5d479e] dark:text-gray-400 truncate">
-                              Requested: {formatDateTime(ext.requested_deadline)}
-                            </p>
-                          </div>
-                          <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0 ${statusCls}`}>
-                            {ext.status}
-                          </span>
-                        </div>
-                        <div className="mt-2 text-xs text-[#5d479e] dark:text-gray-400">
-                          <span>
-                            Current: {formatDateTime(ext.current_deadline)}
-                          </span>
-                          {ext.reviewed_at ? (
-                            <span className="ml-2">• Reviewed: {formatDateTime(ext.reviewed_at)}</span>
-                          ) : null}
-                        </div>
-                        {ext.teacher_response ? (
-                          <p className="mt-2 text-xs text-[#110d1c] dark:text-gray-300">{ext.teacher_response}</p>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-            <UpcomingTasks />
-          </aside>
+          <div className="col-span-12 lg:col-span-4">
+            <ChatAssistant height="100%" className="h-full" />
+          </div>
         </div>
       </main>
-
-      <footer className="mx-auto max-w-7xl px-6 py-10 border-t border-[#d5cee9] dark:border-white/10 mt-12">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-[#5d479e] dark:text-gray-400">
-          <p>© Task Scheduling Agent. Built for Student Success.</p>
-        </div>
-      </footer>
     </div>
   );
 };

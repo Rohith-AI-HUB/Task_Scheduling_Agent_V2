@@ -2,319 +2,286 @@
 <html class="light" lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Teacher Dashboard - Bento Grid Variant 1</title>
-<link href="https://fonts.googleapis.com" rel="preconnect"/>
-<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-<script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
+<title>Student Bento Dashboard - Task Scheduling Agent</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
 <script>
         tailwind.config = {
             darkMode: "class",
             theme: {
                 extend: {
                     colors: {
-                        primary: "#6D28D9",
-                        "soft-purple": "#EDE9FE",
-                        "accent-purple": "#7C3AED",
-                        "surface": "#F3F4F6",
+                        primary: "#7C5CFC",
+                        "background-light": "#F8F9FD",
+                        "background-dark": "#0F111A",
+                        "card-light": "#FFFFFF",
+                        "card-dark": "#1A1D2B",
                     },
                     fontFamily: {
-                        sans: ["Inter", "sans-serif"],
+                        display: ["Plus Jakarta Sans", "sans-serif"],
+                        sans: ["Plus Jakarta Sans", "sans-serif"],
                     },
                     borderRadius: {
-                        'bento': "16px",
+                        DEFAULT: "16px",
                     },
                 },
             },
         };
     </script>
-<style type="text/tailwindcss">
-        @layer base {
-            body {
-                @apply bg-surface text-slate-900 font-sans antialiased;
-            }
+<style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
         }
-        .bento-card {
-            @apply bg-white dark:bg-slate-900 rounded-bento shadow-sm border border-slate-200/60 dark:border-slate-800 transition-all hover:shadow-md;
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: auto auto auto;
+            gap: 20px;
         }
-        .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
         }
-        ::-webkit-scrollbar {
-            height: 6px;
-            width: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        ::-webkit-scrollbar-thumb {
-            @apply bg-slate-200 dark:bg-slate-700 rounded-full;
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }
     </style>
 </head>
-<body class="min-h-screen">
-<nav class="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-md dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-800 px-6 py-3 flex items-center justify-between">
-<div class="flex items-center gap-8">
-<div class="flex items-center gap-2">
-<div class="bg-primary p-1.5 rounded-lg text-white">
-<span class="material-symbols-outlined block">bolt</span>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen transition-colors duration-300">
+<nav class="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-card-dark/80 backdrop-blur-md sticky top-0 z-50">
+<div class="max-w-[1440px] mx-auto px-6 h-16 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white">
+<span class="material-icons-round">schedule</span>
 </div>
-<span class="font-bold text-lg tracking-tight">Task Scheduling Agent</span>
-</div>
-<div class="hidden lg:flex items-center gap-4 text-sm font-medium text-slate-600 dark:text-slate-400">
-<a class="text-primary" href="#">Dashboard</a>
-<a class="hover:text-primary" href="#">Classrooms</a>
-<a class="hover:text-primary" href="#">Schedule</a>
-</div>
+<span class="font-bold text-xl tracking-tight">Task Scheduling Agent</span>
 </div>
 <div class="flex items-center gap-4">
-<div class="relative hidden sm:block">
-<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
-<input class="w-64 pl-9 pr-4 py-1.5 bg-slate-100 dark:bg-slate-800 border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20" placeholder="Search resources..." type="text"/>
-</div>
-<div class="flex items-center gap-3">
-<button class="w-10 h-10 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">
-<span class="material-symbols-outlined">notifications</span>
+<button class="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 relative">
+<span class="material-icons-round text-slate-600 dark:text-slate-400">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-card-dark"></span>
 </button>
-<div class="w-9 h-9 rounded-full bg-slate-200 overflow-hidden border-2 border-white shadow-sm">
-<img alt="User avatar" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAfOFoCZl41Hbqo20hKsXf0IGs8NgbXNLQci1fdrnHk3crLmS1KdSTsbd9-BTlTRpOM853GlJgsq4JrK8zv4FuNX77hJKm8ibLFNQ024iTLX97S1aR2LFzPzNOgrG84zwtBwFbbcUXLnZ9oRSpwt1mQhLEsuYlGwImHbMP_D7g-IkHOSFpseXgUlger1qEmckBJj5kYR0pCwYZl3fQFU_fOUsv9Nuthi49fnvVuTu4nZE355GsNp7Lak-F02WSb0waeENjXW5IG4w8T"/>
+<div class="h-8 w-px bg-slate-200 dark:bg-slate-700 mx-2"></div>
+<div class="flex items-center gap-3">
+<div class="text-right">
+<p class="text-sm font-semibold">Rohith B</p>
+<p class="text-[10px] text-slate-500 uppercase tracking-wider">ID: 5GS8F7</p>
 </div>
+<img alt="User Avatar" class="w-9 h-9 rounded-full border-2 border-primary/20" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBGcCiTnqfE4GnzSaSYi4FJk0NOXemc3HAs3M22JsL20lE6_oNpRL1UgtkV16sngiJbYmjivJrE2YBfOaT2WU2jSgeddp840lKe1yOY_wXsvVV1UsrbtoxHo8fK6km7AgwkbZ3hD2spLJMPzkg1yyu3fPGeqd174gG8b6CuQr9_F7isB5vxhJ7afWAMXCpY8ubOvc4vdhPHolDYVbbAfQbfUkKrfpQxcCRuNQhaNnslOYnXZ6wgdxoPZBKbnEQx50dsCaftSbRY5k9L"/>
+</div>
+<button class="ml-4 bg-primary text-white px-5 py-2 rounded-xl font-semibold text-sm hover:bg-opacity-90 transition-all">Logout</button>
 </div>
 </div>
 </nav>
 <main class="max-w-[1440px] mx-auto p-6">
-<div class="grid grid-cols-12 grid-rows-6 gap-6 h-auto lg:h-[calc(100vh-140px)] min-h-[850px]">
-<div class="col-span-12 lg:col-span-8 row-span-2 bento-card p-8 bg-gradient-to-br from-white to-soft-purple/30 flex flex-col justify-between">
-<div>
-<span class="text-primary font-semibold text-sm bg-primary/10 px-3 py-1 rounded-full uppercase tracking-wider">Academic Portal</span>
-<h1 class="text-4xl font-bold text-slate-900 dark:text-white mt-4">Welcome back,<br/>Rohit Adi</h1>
-<p class="text-slate-500 mt-2 max-w-md">You have 4 classes today and 3 pending extension requests that need your immediate attention.</p>
+<div class="mb-8">
+<div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 mb-4">
+<span>Home</span>
+<span class="material-icons-round text-xs">chevron_right</span>
+<span class="text-primary font-medium">Student Dashboard</span>
 </div>
-<div class="flex gap-4 mt-6">
-<button class="bg-primary text-white px-6 py-3 rounded-xl font-semibold flex items-center gap-2 hover:bg-accent-purple transition-all shadow-lg shadow-primary/20">
-<span class="material-symbols-outlined">add_circle</span>
-                        Quick Action
-                    </button>
-<button class="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-6 py-3 rounded-xl font-semibold hover:bg-slate-50 transition-all">
-                        View Schedule
-                    </button>
+<h1 class="text-3xl font-bold mb-1">Welcome back, Rohith!</h1>
+<p class="text-primary font-medium">You are enrolled in 3 classrooms.</p>
 </div>
-</div>
-<div class="col-span-12 md:col-span-6 lg:col-span-4 row-span-4 bento-card p-6 bg-primary dark:bg-primary relative overflow-hidden group flex flex-col">
-<div class="absolute -right-8 -bottom-8 opacity-10 group-hover:scale-110 transition-transform duration-500 pointer-events-none">
-<span class="material-symbols-outlined text-[160px] text-white">smart_toy</span>
-</div>
-<div class="relative z-10 flex justify-between items-center mb-6 border-b border-white/10 pb-4 shrink-0">
+<div class="grid grid-cols-12 gap-6">
+<div class="col-span-12 lg:col-span-8 grid grid-cols-2 gap-6">
+<div class="col-span-2 bg-card-light dark:bg-card-dark border border-slate-200 dark:border-slate-800 p-6 rounded-3xl shadow-sm">
+<div class="flex items-center justify-between mb-6">
 <div class="flex items-center gap-3">
-<div class="bg-white/20 p-2 rounded-lg text-white">
-<span class="material-symbols-outlined">chat_bubble</span>
+<span class="material-icons-round text-primary bg-primary/10 p-2 rounded-lg">school</span>
+<h2 class="text-xl font-bold">Enrolled Classrooms</h2>
 </div>
-<div>
-<h3 class="text-white font-bold text-lg leading-tight">AI Assistant</h3>
-<span class="text-white/60 text-xs font-medium uppercase tracking-widest">Always Active</span>
+<button class="text-primary text-sm font-semibold hover:underline flex items-center gap-1">
+<span class="material-icons-round text-sm">refresh</span> Refresh
+                        </button>
 </div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div class="border border-slate-100 dark:border-slate-800 p-5 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30 hover:border-primary/30 transition-all group">
+<div class="flex justify-between items-start mb-4">
+<div class="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center">
+<span class="material-icons-round">functions</span>
 </div>
-<button class="text-white/70 hover:text-white transition-colors">
-<span class="material-symbols-outlined">more_horiz</span>
+<span class="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-1 rounded-full uppercase tracking-wider">Active</span>
+</div>
+<h3 class="font-bold text-lg">Maths 2</h3>
+<p class="text-slate-500 text-sm mb-4">Code: ML02</p>
+<div class="flex items-center gap-2 mb-6">
+<img alt="Teacher" class="w-6 h-6 rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCFbj9TKHME4KZIH8ine0M2UQ_nHkDYosG2aGExv1KgD_mE3q2x-z3dvlcBNxz02piDkomJPdMmwD5vjO-qTx9JhkZSIVl8JDRfnkbcT2mxRf0KGUyZYbGSViaz7yOwR8yjz93JELOYfpAOx-ZutW3jE1QdJpJ2PTocCxH14-9TQiS4yuPfEkd4X8H3voNTMdQnuL4htj-UxVgURvz7-0abJPymeWuNkcQb8KnsiCd976DgdfN52D8CbF7QuznW3z2BByrvPhdG3fD0"/>
+<span class="text-xs text-slate-500">Teacher: CZ7xlfP2Bu</span>
+</div>
+<div class="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+<span class="text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">JOIN: FSURQAN8</span>
+<button class="text-primary font-bold text-sm flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                                    Open <span class="material-icons-round text-sm">arrow_forward</span>
 </button>
 </div>
-<div class="relative z-10 flex-1 overflow-y-auto space-y-4 pr-1 mb-4 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
-<div class="flex gap-3">
-<div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0 mt-1">
-<span class="material-symbols-outlined text-sm text-white">smart_toy</span>
 </div>
-<div class="bg-white/10 p-3 rounded-2xl rounded-tl-none text-white text-sm backdrop-blur-sm shadow-sm">
-                Good morning, Rohit! You have 3 extension requests pending. Would you like me to draft responses based on the students' history?
-            </div>
+<div class="border border-slate-100 dark:border-slate-800 p-5 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30 hover:border-primary/30 transition-all group">
+<div class="flex justify-between items-start mb-4">
+<div class="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-xl flex items-center justify-center">
+<span class="material-icons-round">science</span>
 </div>
-<div class="flex gap-3 flex-row-reverse">
-<div class="bg-white text-primary p-3 rounded-2xl rounded-tr-none text-sm font-medium shadow-sm">
-                 Yes, please highlight the ones with medical certificates first.
-             </div>
+<span class="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-1 rounded-full uppercase tracking-wider">Active</span>
 </div>
-<div class="flex gap-3">
-<div class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0 mt-1">
-<span class="material-symbols-outlined text-sm text-white">smart_toy</span>
+<h3 class="font-bold text-lg">Death</h3>
+<p class="text-slate-500 text-sm mb-4">Code: DEATH01</p>
+<div class="flex items-center gap-2 mb-6">
+<img alt="Teacher" class="w-6 h-6 rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBEfV4e-bJVILdHoC_5OOGZSx9D-RR-vRJsG5Rf_X3lQ55rK6U0KGrDRTV1SZRL5-hbg8vavQxAwEOlznlHr8UNJ355dESVc-J1ypBF3gx_o2bC6sQliztXoRGkZehesqQ0TOhrkpPS5ngDxmM_ulMNIL8j4xa0IXj9cnGi6t_6MMW9hTBdZaSo4TH5kZGQOn701zzMG1qIBaxeGRfMgMqUf0vo-iX_B0_vjVF9pzSciEE-1NagZXI_YrEF9LhdX6uLp7jo-AZJnLw4"/>
+<span class="text-xs text-slate-500">Teacher: A2fp40Mlut</span>
 </div>
-<div class="bg-white/10 p-3 rounded-2xl rounded-tl-none text-white text-sm backdrop-blur-sm shadow-sm">
-<div class="flex items-center gap-2 mb-2">
-<span class="material-symbols-outlined text-xs animate-spin">sync</span>
-<span class="text-xs opacity-70">Processing...</span>
-</div>
-                 Checking Sarah Jenkins' attachment...
-             </div>
-</div>
-</div>
-<div class="relative z-10 mt-auto pt-2 shrink-0">
-<div class="relative flex items-center gap-2">
-<input class="w-full bg-white/10 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/50 focus:ring-2 focus:ring-white/30 focus:border-transparent transition-all backdrop-blur-md shadow-lg" placeholder="Type a message..." type="text"/>
-<button class="absolute right-2 top-1/2 -translate-y-1/2 bg-white text-primary p-1.5 rounded-lg hover:bg-white/90 transition-colors shadow-sm">
-<span class="material-symbols-outlined text-xl">send</span>
+<div class="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+<span class="text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">JOIN: 5JH61WDP</span>
+<button class="text-primary font-bold text-sm flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                                    Open <span class="material-icons-round text-sm">arrow_forward</span>
 </button>
 </div>
 </div>
 </div>
-<div class="col-span-12 md:col-span-6 lg:col-span-4 row-span-2 bento-card overflow-hidden flex flex-col">
-<div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
-<h3 class="font-bold text-slate-800 dark:text-white flex items-center gap-2">
-<span class="material-symbols-outlined text-primary">event_note</span>
-                        Upcoming
-                    </h3>
-<span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">14 Days</span>
 </div>
-<div class="flex-1 overflow-y-auto p-4 space-y-3">
-<div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+<div class="bg-card-light dark:bg-card-dark border border-slate-200 dark:border-slate-800 p-6 rounded-3xl shadow-sm flex flex-col justify-center">
+<h3 class="font-bold text-lg mb-2">Join Classroom</h3>
+<p class="text-sm text-slate-500 mb-4">Enter your classroom code to enroll in a new subject.</p>
+<div class="flex gap-2">
+<div class="relative flex-1">
+<span class="material-icons-round absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">vpn_key</span>
+<input class="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-900 border-none rounded-xl focus:ring-2 focus:ring-primary text-sm" placeholder="e.g. AB12XY" type="text"/>
+</div>
+<button class="bg-primary text-white px-4 py-2 rounded-xl font-bold text-sm hover:shadow-lg hover:shadow-primary/30 transition-all">Join</button>
+</div>
+</div>
+<div class="bg-card-light dark:bg-card-dark border border-slate-200 dark:border-slate-800 p-6 rounded-3xl shadow-sm">
+<div class="flex items-center justify-between mb-4">
+<div class="flex items-center gap-2">
+<span class="material-icons-round text-orange-500">warning</span>
+<h3 class="font-bold text-lg">Due Soon</h3>
+</div>
+<span class="flex items-center gap-1 text-[10px] text-green-500 font-bold uppercase"><span class="w-1.5 h-1.5 bg-green-500 rounded-full"></span> Refresh</span>
+</div>
+<div class="p-3 border-l-4 border-orange-400 bg-orange-50 dark:bg-orange-900/10 rounded-r-xl">
+<p class="font-bold text-sm">Weekly Quiz 4</p>
+<p class="text-xs text-slate-500">Due in 4d</p>
+</div>
+<button class="w-full mt-4 text-primary font-bold text-xs py-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors">See Calendar</button>
+</div>
+<div class="col-span-2 bg-card-light dark:bg-card-dark border border-slate-200 dark:border-slate-800 p-6 rounded-3xl shadow-sm">
+<div class="flex items-center justify-between mb-4">
+<div class="flex items-center gap-2">
+<span class="material-icons-round text-primary">hourglass_empty</span>
+<h3 class="font-bold text-lg">My Extension Requests</h3>
+</div>
+<button class="text-[10px] text-slate-500 font-bold uppercase hover:text-primary transition-colors">Refresh</button>
+</div>
+<div class="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl">
+<div>
+<div class="flex items-center gap-3 mb-1">
+<p class="font-bold text-sm">Weekly Quiz 4</p>
+<span class="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold">APPROVED</span>
+</div>
+<p class="text-[11px] text-slate-500 mb-2 italic">Requested: 28/1/2026, 11:10:00 pm</p>
+<p class="text-[10px] text-slate-400">Current: 26/1/2026, 4:40:00 am • Reviewed: 23/1/2026</p>
+</div>
+<span class="material-icons-round text-slate-300">chevron_right</span>
+</div>
+</div>
+</div>
+<div class="col-span-12 lg:col-span-4 flex flex-col gap-6 h-full">
+<div class="bg-card-light dark:bg-card-dark border border-slate-200 dark:border-slate-800 p-6 rounded-3xl shadow-sm">
+<div class="flex items-center justify-between mb-4">
+<h2 class="text-xl font-bold">AI Schedule</h2>
+<button class="p-2 text-slate-400 hover:text-primary transition-colors">
+<span class="material-icons-round">sync</span>
+</button>
+</div>
+<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-4">
+<span class="w-1.5 h-1.5 bg-green-500 rounded-full"></span> AI OPTIMIZED • 5 HOURS AGO
+                    </p>
+<div class="grid grid-cols-3 gap-2 mb-6">
+<div class="bg-red-50 dark:bg-red-900/10 p-3 rounded-2xl border border-red-100 dark:border-red-900/20">
+<p class="text-[9px] font-bold text-red-600 uppercase tracking-wider mb-1">Urgent</p>
+<p class="text-2xl font-bold text-red-700">0</p>
+</div>
+<div class="bg-orange-50 dark:bg-orange-900/10 p-3 rounded-2xl border border-orange-100 dark:border-orange-900/20">
+<p class="text-[9px] font-bold text-orange-600 uppercase tracking-wider mb-1">High</p>
+<p class="text-2xl font-bold text-orange-700">1</p>
+</div>
+<div class="bg-indigo-50 dark:bg-indigo-900/10 p-3 rounded-2xl border border-indigo-100 dark:border-indigo-900/20">
+<p class="text-[9px] font-bold text-indigo-600 uppercase tracking-wider mb-1">Normal</p>
+<p class="text-2xl font-bold text-indigo-700">0</p>
+</div>
+</div>
+<div class="relative pl-4 mb-6">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary/20 rounded-full">
+<div class="h-1/2 w-full bg-primary rounded-full"></div>
+</div>
+<div class="flex items-start justify-between">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="text-xs font-bold text-primary">74</span>
+<p class="font-bold text-sm">Weekly Quiz 4</p>
+</div>
+<p class="text-[10px] text-slate-500">Due 28/1/2026, 11:10:00 pm • 20 pts</p>
+</div>
+<span class="material-icons-round text-orange-500 text-base">warning</span>
+</div>
+</div>
+<button class="w-full flex items-center justify-center gap-2 text-primary font-bold text-sm hover:underline">
+                        VIEW FULL SCHEDULE <span class="material-icons-round text-sm">arrow_forward</span>
+</button>
+</div>
+<div class="flex-1 bg-card-light dark:bg-card-dark border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm flex flex-col min-h-[500px]">
+<div class="p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 rounded-t-3xl">
+<div class="flex items-center justify-between mb-4">
 <div class="flex items-center gap-3">
-<div class="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
-<span class="material-symbols-outlined text-lg">assignment</span>
+<div class="w-10 h-10 bg-primary text-white rounded-xl flex items-center justify-center">
+<span class="material-icons-round">smart_toy</span>
 </div>
 <div>
-<h4 class="font-semibold text-sm leading-tight">Weekly Quiz</h4>
-<p class="text-[11px] text-slate-500">Calculus • 45 Students</p>
+<h2 class="font-bold text-lg">AI Assistant</h2>
+<p class="text-[10px] text-slate-400 font-medium">Task + general help</p>
 </div>
 </div>
-<div class="text-right shrink-0">
-<span class="text-[10px] font-bold text-red-500 bg-red-50 px-2 py-1 rounded">2 Days</span>
+<button class="text-slate-400 hover:text-red-500 transition-colors">
+<span class="material-icons-round">delete_outline</span>
+</button>
+</div>
+<div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+<span>Messages Today</span>
+<span class="text-primary">25/25</span>
+</div>
+<div class="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-primary w-full"></div>
 </div>
 </div>
-<div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+<div class="flex-1 p-6 flex flex-col items-center justify-center text-center space-y-4">
+<div class="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center text-primary">
+<span class="material-icons-round text-3xl">chat_bubble_outline</span>
+</div>
+<h3 class="font-bold">Start a conversation</h3>
+<p class="text-xs text-slate-500 max-w-[200px] leading-relaxed">
+                            Ask about tasks, deadlines, submissions, scheduling, or general questions.
+                        </p>
+</div>
+<div class="p-6 pt-0">
+<div class="bg-slate-100 dark:bg-slate-900 rounded-2xl p-4">
 <div class="flex items-center gap-3">
-<div class="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
-<span class="material-symbols-outlined text-lg">lab_panel</span>
+<input class="flex-1 bg-transparent border-none focus:ring-0 text-sm p-0" placeholder="Ask about tasks, deadlines, or ai..." type="text"/>
+<button class="bg-primary text-white p-2 rounded-xl flex items-center gap-2 px-4 shadow-lg shadow-primary/20 hover:scale-105 transition-transform">
+<span class="text-sm font-bold">Send</span>
+<span class="material-icons-round text-sm">send</span>
+</button>
 </div>
-<div>
-<h4 class="font-semibold text-sm leading-tight">Lab Report</h4>
-<p class="text-[11px] text-slate-500">Physics II • 32 Students</p>
-</div>
-</div>
-<div class="text-right shrink-0">
-<span class="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">5 Days</span>
-</div>
-</div>
-</div>
-</div>
-<div class="col-span-12 md:col-span-6 lg:col-span-4 row-span-2 bento-card p-8 bg-slate-900 dark:bg-black text-white flex flex-col justify-between">
-<div>
-<h3 class="text-xl font-bold">Pending Tasks</h3>
-<p class="text-slate-400 text-sm mt-1">Assignments awaiting grading</p>
-</div>
-<div class="flex items-baseline gap-2">
-<span class="text-6xl font-black text-primary">24</span>
-<span class="text-slate-500 font-medium">submissions</span>
-</div>
-<div class="w-full bg-slate-800 rounded-full h-2">
-<div class="bg-primary h-2 rounded-full w-3/4"></div>
-</div>
-<button class="w-full py-2.5 rounded-lg border border-slate-700 text-sm font-semibold hover:bg-slate-800 transition-colors">
-                    Review All
-                </button>
-</div>
-<div class="col-span-12 lg:col-span-6 row-span-2 bento-card p-6 flex flex-col">
-<div class="flex justify-between items-center mb-4">
-<h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
-<span class="material-symbols-outlined text-primary">school</span>
-                        Your Classrooms
-                    </h3>
-<button class="text-primary text-sm font-bold hover:underline">View All</button>
-</div>
-<div class="flex-1 flex gap-4 overflow-x-auto pb-2 scroll-smooth">
-<div class="min-w-[260px] bg-slate-50 dark:bg-slate-800 rounded-xl p-5 border border-slate-100 dark:border-slate-700 flex flex-col justify-between">
-<div>
-<div class="flex justify-between items-start mb-2">
-<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary uppercase">CS-101</span>
-<span class="material-symbols-outlined text-slate-300">more_vert</span>
-</div>
-<h4 class="font-bold text-slate-800 dark:text-white">Computer Science</h4>
-<p class="text-xs text-slate-500 mt-1">Intro to Algorithms</p>
-</div>
-<div class="mt-6 flex items-center justify-between">
-<div class="flex -space-x-2">
-<div class="w-6 h-6 rounded-full bg-slate-200 border-2 border-white"></div>
-<div class="w-6 h-6 rounded-full bg-slate-300 border-2 border-white"></div>
-<div class="w-6 h-6 rounded-full bg-slate-400 border-2 border-white"></div>
-<div class="w-6 h-6 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[8px] font-bold">+24</div>
-</div>
-<button class="text-primary font-bold text-xs">JOIN CODE: <span class="font-mono">XK92</span></button>
-</div>
-</div>
-<div class="min-w-[260px] bg-slate-50 dark:bg-slate-800 rounded-xl p-5 border border-slate-100 dark:border-slate-700 flex flex-col justify-between">
-<div>
-<div class="flex justify-between items-start mb-2">
-<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 uppercase">MAT-302</span>
-<span class="material-symbols-outlined text-slate-300">more_vert</span>
-</div>
-<h4 class="font-bold text-slate-800 dark:text-white">Advanced Calculus</h4>
-<p class="text-xs text-slate-500 mt-1">Multivariable Analysis</p>
-</div>
-<div class="mt-6 flex items-center justify-between">
-<div class="flex -space-x-2">
-<div class="w-6 h-6 rounded-full bg-slate-200 border-2 border-white"></div>
-<div class="w-6 h-6 rounded-full bg-slate-300 border-2 border-white"></div>
-<div class="w-6 h-6 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[8px] font-bold">+12</div>
-</div>
-<button class="text-primary font-bold text-xs">JOIN CODE: <span class="font-mono">MATH2</span></button>
-</div>
-</div>
-<div class="min-w-[180px] border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl flex flex-col items-center justify-center p-5 cursor-pointer hover:bg-slate-50 transition-colors group">
-<div class="w-10 h-10 rounded-full bg-slate-100 group-hover:bg-primary/10 flex items-center justify-center text-slate-400 group-hover:text-primary mb-2 transition-all">
-<span class="material-symbols-outlined">add</span>
-</div>
-<span class="text-sm font-semibold text-slate-500 group-hover:text-primary">Add New</span>
-</div>
-</div>
-</div>
-<div class="col-span-6 md:col-span-3 lg:col-span-2 row-span-2 space-y-6">
-<div class="h-[calc(50%-12px)] bento-card p-6 flex flex-col justify-center items-center text-center">
-<div class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-2">
-<span class="material-symbols-outlined text-2xl">book</span>
-</div>
-<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Subjects</p>
-<h3 class="text-2xl font-bold mt-1">12</h3>
-</div>
-<div class="h-[calc(50%-12px)] bento-card p-6 flex flex-col justify-center items-center text-center">
-<div class="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center mb-2">
-<span class="material-symbols-outlined text-2xl">groups</span>
-</div>
-<p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enrolled</p>
-<h3 class="text-2xl font-bold mt-1">458</h3>
-</div>
-</div>
-<div class="col-span-12 lg:col-span-4 row-span-2 bento-card flex flex-col">
-<div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
-<h3 class="font-bold text-slate-800 dark:text-white flex items-center gap-2">
-<span class="material-symbols-outlined text-amber-500">history_edu</span>
-                        Extensions
-                    </h3>
-<div class="flex gap-1">
-<span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-<span class="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">3 Active</span>
-</div>
-</div>
-<div class="flex-1 p-4 space-y-4 overflow-y-auto">
-<div class="flex gap-3">
-<div class="w-8 h-8 rounded-full bg-slate-200 shrink-0"></div>
-<div>
-<p class="text-sm font-semibold">Sarah Jenkins <span class="text-slate-400 font-normal">requested 2 days for</span> Assignment 4</p>
-<p class="text-xs text-slate-400 mt-0.5">"Personal health reasons, doctor's note attached"</p>
-<div class="mt-2 flex gap-2">
-<button class="text-[10px] font-bold text-primary bg-primary/10 px-3 py-1 rounded hover:bg-primary/20">APPROVE</button>
-<button class="text-[10px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded hover:bg-slate-200">DENY</button>
-</div>
-</div>
-</div>
-<div class="flex gap-3">
-<div class="w-8 h-8 rounded-full bg-slate-200 shrink-0"></div>
-<div>
-<p class="text-sm font-semibold">Mark Thompson <span class="text-slate-400 font-normal">requested 1 day for</span> Lab Report</p>
-<div class="mt-2 flex gap-2">
-<button class="text-[10px] font-bold text-primary bg-primary/10 px-3 py-1 rounded">APPROVE</button>
-<button class="text-[10px] font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded">DENY</button>
-</div>
+<p class="text-[10px] text-slate-400 mt-3 text-right">0/500 characters</p>
 </div>
 </div>
 </div>
 </div>
 </div>
 </main>
+<script>
+        // Optional: Simple Dark Mode Toggle Logic
+        // For now, it stays in light mode as per user's predominant aesthetic, 
+        // but the code is fully dark-mode capable.
+    </script>
+
 </body></html>
