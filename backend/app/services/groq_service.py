@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Any
 from functools import wraps
@@ -130,6 +131,128 @@ class RateLimiter:
         return max(0, limit_config["max"] - recent_calls)
 
 
+class RoleQuotaLimiter:
+    def __init__(
+        self,
+        global_rpm: int,
+        global_rpd: int,
+        teacher_weight: int,
+        student_weight: int,
+        teacher_count: int,
+        student_count: int,
+    ):
+        self._global_rpm = max(0, int(global_rpm))
+        self._global_rpd = max(0, int(global_rpd))
+
+        self._teacher_weight = max(0, int(teacher_weight))
+        self._student_weight = max(0, int(student_weight))
+        self._teacher_count = max(0, int(teacher_count))
+        self._student_count = max(0, int(student_count))
+
+        teacher_share = self._teacher_weight * self._teacher_count
+        student_share = self._student_weight * self._student_count
+        total_share = teacher_share + student_share
+        if total_share <= 0:
+            teacher_share = 1
+            student_share = 1
+            total_share = 2
+
+        self._share = {
+            "teacher": teacher_share,
+            "student": student_share,
+            "total": total_share,
+        }
+
+        self._limits = {
+            "teacher": {
+                "rpm": (self._global_rpm * teacher_share) / total_share,
+                "rpd": (self._global_rpd * teacher_share) / total_share,
+            },
+            "student": {
+                "rpm": (self._global_rpm * student_share) / total_share,
+                "rpd": (self._global_rpd * student_share) / total_share,
+            },
+        }
+
+        now = datetime.utcnow()
+        self._buckets: Dict[str, Dict[str, float | datetime]] = {
+            "teacher": {
+                "minute_tokens": float(self._limits["teacher"]["rpm"]),
+                "minute_last": now,
+                "day_tokens": float(self._limits["teacher"]["rpd"]),
+                "day_last": now,
+            },
+            "student": {
+                "minute_tokens": float(self._limits["student"]["rpm"]),
+                "minute_last": now,
+                "day_tokens": float(self._limits["student"]["rpd"]),
+                "day_last": now,
+            },
+        }
+
+    def get_limits(self) -> Dict[str, Any]:
+        teacher_per_user = (
+            (self._limits["teacher"]["rpd"] / self._teacher_count) if self._teacher_count > 0 else None
+        )
+        student_per_user = (
+            (self._limits["student"]["rpd"] / self._student_count) if self._student_count > 0 else None
+        )
+        return {
+            "global": {"rpm": self._global_rpm, "rpd": self._global_rpd},
+            "weights": {"teacher": self._teacher_weight, "student": self._student_weight},
+            "counts": {"teacher": self._teacher_count, "student": self._student_count},
+            "share": dict(self._share),
+            "teacher": {"rpm": self._limits["teacher"]["rpm"], "rpd": self._limits["teacher"]["rpd"]},
+            "student": {"rpm": self._limits["student"]["rpm"], "rpd": self._limits["student"]["rpd"]},
+            "per_user_rpd": {"teacher": teacher_per_user, "student": student_per_user},
+        }
+
+    def _normalize_role(self, role: str) -> str:
+        r = str(role or "").lower()
+        return "teacher" if r == "teacher" else "student"
+
+    def _refill_minute(self, role: str):
+        r = self._normalize_role(role)
+        capacity = float(self._limits[r]["rpm"])
+        if capacity <= 0:
+            return
+        bucket = self._buckets[r]
+        now = datetime.utcnow()
+        last = bucket["minute_last"]
+        elapsed = max(0.0, (now - last).total_seconds())
+        refill_rate = capacity / 60.0
+        bucket["minute_tokens"] = min(capacity, float(bucket["minute_tokens"]) + elapsed * refill_rate)
+        bucket["minute_last"] = now
+
+    def _refill_day(self, role: str):
+        r = self._normalize_role(role)
+        capacity = float(self._limits[r]["rpd"])
+        if capacity <= 0:
+            return
+        bucket = self._buckets[r]
+        now = datetime.utcnow()
+        last = bucket["day_last"]
+        elapsed = max(0.0, (now - last).total_seconds())
+        refill_rate = capacity / 86400.0
+        bucket["day_tokens"] = min(capacity, float(bucket["day_tokens"]) + elapsed * refill_rate)
+        bucket["day_last"] = now
+
+    def check_limit(self, role: str) -> bool:
+        r = self._normalize_role(role)
+        self._refill_minute(r)
+        self._refill_day(r)
+        bucket = self._buckets[r]
+        return float(bucket["minute_tokens"]) >= 1.0 and float(bucket["day_tokens"]) >= 1.0
+
+    def record_usage(self, role: str):
+        r = self._normalize_role(role)
+        self._refill_minute(r)
+        self._refill_day(r)
+        bucket = self._buckets[r]
+        bucket["minute_tokens"] = max(0.0, float(bucket["minute_tokens"]) - 1.0)
+        bucket["day_tokens"] = max(0.0, float(bucket["day_tokens"]) - 1.0)
+
+
 class GroqService:
     """
     Centralized Groq AI service with:
@@ -156,6 +279,14 @@ class GroqService:
         self.model = settings.groq_model
         self.cache = InMemoryCache()
         self.rate_limiter = RateLimiter()
+        self.role_quota_limiter = RoleQuotaLimiter(
+            global_rpm=settings.groq_global_rpm,
+            global_rpd=settings.groq_global_rpd,
+            teacher_weight=settings.groq_teacher_weight,
+            student_weight=settings.groq_student_weight,
+            teacher_count=settings.groq_teacher_count,
+            student_count=settings.groq_student_count,
+        )
         self._initialized = True
 
         # Initialize Groq client if API key is available
@@ -236,6 +367,7 @@ class GroqService:
         feature: str,
         user_uid: str,
         prompt: str,
+        role: str = "student",
         system_prompt: str = "",
         fallback: str = "Unable to generate AI response.",
         use_cache: bool = True,
@@ -282,6 +414,9 @@ class GroqService:
                 return cached_response
 
         try:
+            if not self.role_quota_limiter.check_limit(role):
+                raise RateLimitExceeded("Global Groq quota exceeded for your role. Please try again later.")
+
             # Make the API call
             response = await self._call_groq(
                 prompt=prompt,
@@ -292,6 +427,7 @@ class GroqService:
 
             # Record usage
             self.rate_limiter.record_usage(user_uid, feature)
+            self.role_quota_limiter.record_usage(role)
 
             # Cache response
             if use_cache and settings.groq_enable_caching:
@@ -666,7 +802,22 @@ Keep explanations concise and actionable."""
             if lines:
                 history_formatted = "\nRECENT CONVERSATION:\n" + "\n".join(lines)
 
-        prompt = f"""USER ROLE: {normalized_role.upper()}
+        is_general_intent = str(intent or "").lower() == "out_of_scope"
+
+        if is_general_intent:
+            prompt = f"""QUESTION: {message}
+
+Write plain text only (no Markdown formatting like **bold**, # headings, or tables).
+Keep it short and direct:
+1) One-sentence definition
+2) 3-5 bullet points starting with "-"
+3) A tiny code example (indent code lines with 2 spaces, no ``` fences)
+"""
+
+            system_prompt = """You are a helpful software assistant.
+Answer general software engineering questions clearly and concisely."""
+        else:
+            prompt = f"""USER ROLE: {normalized_role.upper()}
 
 USER CONTEXT:{context_formatted}
 {history_formatted}
@@ -675,39 +826,55 @@ DETECTED INTENT: {intent}
 
 USER QUESTION: {message}
 
-Provide a helpful, concise response. If the question is outside your scope (task management), politely redirect to task-related queries.
+Write plain text only (no Markdown formatting like **bold**, # headings, or tables).
+Provide a helpful, concise response with clear next steps.
+"""
 
-Keep response under 200 words."""
+            system_prompt = """You are a task assistant inside a classroom task scheduling app.
+Be concise, specific, and actionable."""
 
-        system_prompt = """You are a task management assistant inside a classroom task scheduling app.
+        if not self.is_available():
+            raise GroqServiceError("Groq client not initialized")
 
-You help with:
-- Task information and deadlines
-- Submission status and grades
-- Scheduling and prioritization
+        if not self.rate_limiter.check_limit(user_uid, "chat"):
+            raise RateLimitExceeded("Rate limit exceeded for chat. Please wait before trying again.")
 
-For teachers, focus on: tasks in their classrooms, upcoming deadlines, and submissions needing grading.
-For students, focus on: tasks assigned to them, due dates, and their submission status.
+        try:
+            if not self.role_quota_limiter.check_limit(normalized_role):
+                raise RateLimitExceeded("Global Groq quota exceeded for your role. Please try again later.")
 
-You do NOT help with:
-- Course content or homework answers
-- General tutoring
-- Topics unrelated to task management
+            response = await self._call_groq(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                max_tokens=400 if is_general_intent else 300,
+                temperature=0.3 if is_general_intent else 0.6,
+            )
+        except (GroqServiceError, RateLimitExceeded):
+            raise
+        except Exception as e:
+            raise GroqServiceError(str(e))
 
-Be friendly, concise, and actionable."""
+        self.rate_limiter.record_usage(user_uid, "chat")
+        self.role_quota_limiter.record_usage(normalized_role)
+        return self._refine_chat_text(response)
 
-        fallback = "I can help you with your tasks, deadlines, and submissions. What would you like to know?"
+    def _refine_chat_text(self, text: str) -> str:
+        s = str(text or "")
+        s = s.replace("\r\n", "\n").replace("\r", "\n").strip()
+        if not s:
+            return ""
 
-        return await self.safe_call(
-            feature="chat",
-            user_uid=user_uid,
-            prompt=prompt,
-            system_prompt=system_prompt,
-            fallback=fallback,
-            use_cache=False,  # Don't cache chat responses
-            max_tokens=300,
-            temperature=0.7
-        )
+        s = re.sub(r"(?m)^```.*$\n?", "", s)
+        s = re.sub(r"\*\*(.+?)\*\*", r"\1", s)
+        s = re.sub(r"(?m)^#{1,6}\s+", "", s)
+        s = "\n".join([line.rstrip() for line in s.split("\n")])
+        s = re.sub(r"\n{3,}", "\n\n", s)
+        s = re.sub(r"^(answer|response)\s*:\s*", "", s.strip(), flags=re.IGNORECASE)
+        s = re.sub(r"(?i)\b(as an ai (language )?model|as a language model)\b.*?\n", "", s)
+        s = s.strip()
+        if len(s) > 4000:
+            s = s[:4000].rstrip() + "…"
+        return s
 
     async def analyze_extension_request(self, preprocessed_data: dict) -> dict:
         """

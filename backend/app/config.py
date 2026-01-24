@@ -35,11 +35,17 @@ class Settings(BaseSettings):
 
     # Groq AI Configuration
     groq_api_key: Optional[str] = Field(default=None, alias="GROQ_API_KEY")
-    groq_model: str = Field(default="llama-3.1-70b-versatile", alias="GROQ_MODEL")
+    groq_model: str = Field(default="llama-3.1-8b-instant", alias="GROQ_MODEL")
     groq_enable_routing: bool = Field(default=True, alias="GROQ_ENABLE_ROUTING")
     groq_enable_guards: bool = Field(default=True, alias="GROQ_ENABLE_GUARDS")
     groq_enable_caching: bool = Field(default=True, alias="GROQ_ENABLE_CACHING")
     groq_cache_ttl_seconds: int = Field(default=3600, alias="GROQ_CACHE_TTL_SECONDS")
+    groq_global_rpm: int = Field(default=30, alias="GROQ_GLOBAL_RPM")
+    groq_global_rpd: int = Field(default=14000, alias="GROQ_GLOBAL_RPD")
+    groq_teacher_weight: int = Field(default=2, alias="GROQ_TEACHER_WEIGHT")
+    groq_student_weight: int = Field(default=1, alias="GROQ_STUDENT_WEIGHT")
+    groq_teacher_count: int = Field(default=40, alias="GROQ_TEACHER_COUNT")
+    groq_student_count: int = Field(default=100, alias="GROQ_STUDENT_COUNT")
 
     # Redis Configuration (for Groq caching)
     redis_url: Optional[str] = Field(default=None, alias="REDIS_URL")

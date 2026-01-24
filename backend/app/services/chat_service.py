@@ -5,7 +5,7 @@ context gathering, and Groq integration.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, List, Any
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -14,9 +14,8 @@ from app.ai.intent_classifier import (
     classify_intent,
     get_required_context,
     get_greeting_response,
-    get_out_of_scope_response
 )
-from app.services.groq_service import groq_service, RateLimitExceeded
+from app.services.groq_service import groq_service, RateLimitExceeded, GroqServiceError
 from app.services.credit_service import CreditService
 from app.database.collections import get_collection
 
@@ -48,21 +47,12 @@ class ChatService:
         Returns:
             Dict with response, intent, context_used, credits_remaining
         """
-        # Check credits first
-        credit_result = await self.credit_service.use_credit(user_uid, role)
-
-        if not credit_result["success"]:
-            return {
-                "response": credit_result["error"],
-                "intent": "no_credits",
-                "context_used": [],
-                "credits_remaining": 0,
-                "error": "NO_CREDITS"
-            }
-
         # Classify intent
         intent, confidence = classify_intent(message)
         logger.debug(f"Classified intent: {intent} (confidence: {confidence})")
+
+        normalized_role = str(role or "student").lower()
+        credit_status = await self.credit_service.get_credits(user_uid, normalized_role)
 
         # Handle special intents without Groq
         if intent == ChatIntent.GREETING:
@@ -70,44 +60,63 @@ class ChatService:
                 "response": get_greeting_response(),
                 "intent": intent.value,
                 "context_used": [],
-                "credits_remaining": credit_result["credits_remaining"],
-                "timestamp": datetime.utcnow().isoformat()
+                "credits_remaining": credit_status["credits_remaining"],
+                "timestamp": datetime.now(timezone.utc)
             }
 
-        if intent == ChatIntent.OUT_OF_SCOPE:
+        if credit_status["credits_remaining"] <= 0:
             return {
-                "response": get_out_of_scope_response(),
-                "intent": intent.value,
+                "response": "Daily message limit reached. Credits reset at midnight UTC.",
+                "intent": "no_credits",
                 "context_used": [],
-                "credits_remaining": credit_result["credits_remaining"],
-                "timestamp": datetime.utcnow().isoformat()
+                "credits_remaining": 0,
+                "error": "NO_CREDITS",
+                "timestamp": datetime.now(timezone.utc),
+            }
+
+        if not groq_service.is_available():
+            return {
+                "response": "AI chat is not configured. Set GROQ_API_KEY on the backend and restart the server.",
+                "intent": "ai_unavailable",
+                "context_used": [],
+                "credits_remaining": credit_status["credits_remaining"],
+                "error": "GROQ_NOT_CONFIGURED",
+                "timestamp": datetime.now(timezone.utc),
             }
 
         # Gather context based on intent
-        normalized_role = str(role or "student").lower()
         context = await self._gather_context(user_uid, normalized_role, intent)
         context_used = list(context.keys())
 
         # Generate response with Groq
         history_for_llm = (self._history.get(user_uid) or [])[-10:]
 
-        if groq_service.is_available():
-            try:
-                response = await groq_service.chat_response(
-                    user_uid=user_uid,
-                    message=message,
-                    intent=intent.value,
-                    context=context,
-                    role=normalized_role,
-                    history=history_for_llm,
-                )
-            except RateLimitExceeded as e:
-                response = str(e)
-            except Exception as e:
-                logger.error(f"Chat response error: {e}")
-                response = self._fallback_response(intent, context, role=normalized_role)
-        else:
+        groq_succeeded = False
+        try:
+            response = await groq_service.chat_response(
+                user_uid=user_uid,
+                message=message,
+                intent=intent.value,
+                context=context,
+                role=normalized_role,
+                history=history_for_llm,
+            )
+            groq_succeeded = True
+        except RateLimitExceeded as e:
+            response = str(e)
+        except GroqServiceError as e:
+            logger.warning(f"Groq error for user {user_uid}: {e}")
+            response = f"Groq failed: {str(e)}"
+        except Exception as e:
+            logger.error(f"Chat response error: {e}")
             response = self._fallback_response(intent, context, role=normalized_role)
+
+        credits_remaining = credit_status["credits_remaining"]
+        if groq_succeeded:
+            credit_result = await self.credit_service.use_credit(user_uid, normalized_role)
+            if not credit_result["success"]:
+                logger.warning(f"Credit update failed for user {user_uid}: {credit_result.get('error')}")
+            credits_remaining = credit_result.get("credits_remaining", credits_remaining)
 
         # Store in history
         self._add_to_history(user_uid, "user", message, intent.value)
@@ -117,8 +126,8 @@ class ChatService:
             "response": response,
             "intent": intent.value,
             "context_used": context_used,
-            "credits_remaining": credit_result["credits_remaining"],
-            "timestamp": datetime.utcnow().isoformat()
+            "credits_remaining": credits_remaining,
+            "timestamp": datetime.now(timezone.utc)
         }
 
     async def _gather_context(
@@ -406,7 +415,10 @@ class ChatService:
         submissions = context.get("submissions", []) or []
         workload = context.get("workload", {}) or {}
 
-        if intent == ChatIntent.TASK_INFO or intent == ChatIntent.GENERAL_QUERY:
+        if intent == ChatIntent.OUT_OF_SCOPE:
+            return "I couldn't answer that right now. Please try again in a moment."
+
+        if intent == ChatIntent.TASK_INFO:
             tasks = context.get("tasks", [])
             if tasks:
                 task_list = "\n".join([
@@ -417,6 +429,11 @@ class ChatService:
             if role == "teacher":
                 return "I couldn't find any tasks in your classrooms yet. Create a classroom and add tasks, then ask me again."
             return "You don't have any upcoming tasks."
+        
+        if intent == ChatIntent.GENERAL_QUERY:
+            if role == "teacher":
+                return "Ask me about tasks in your classrooms, upcoming deadlines, or submissions that need grading."
+            return "Ask me about your tasks, deadlines, or your submission status."
 
         elif intent == ChatIntent.SUBMISSION_STATUS:
             submissions = context.get("submissions", [])
@@ -473,7 +490,7 @@ class ChatService:
             "role": role,
             "content": content,
             "intent": intent,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc)
         })
 
         # Keep only last 20 messages per user

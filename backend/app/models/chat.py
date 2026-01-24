@@ -3,9 +3,13 @@ Chat and Credit System Models
 Pydantic models for the chat assistant and credit system.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from pydantic import BaseModel, Field
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 # ========================================
@@ -64,7 +68,7 @@ class ChatResponse(BaseModel):
     )
     credits_remaining: int = Field(..., description="Credits remaining after this message")
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=_utcnow,
         description="Response timestamp"
     )
 
@@ -74,7 +78,7 @@ class ChatMessage(BaseModel):
     role: str = Field(..., description="'user' or 'assistant'")
     content: str
     intent: Optional[str] = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=_utcnow)
 
 
 class ChatHistory(BaseModel):

@@ -60,7 +60,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Skip API requests - always go to network
-  if (API_ROUTES.some(route => url.pathname.startsWith(route))) {
+  if (url.origin === self.location.origin && API_ROUTES.some(route => url.pathname.startsWith(route))) {
     event.respondWith(
       fetch(request)
         .catch(() => {

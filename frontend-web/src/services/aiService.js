@@ -41,6 +41,11 @@ const aiService = {
     return response.data;
   },
 
+  getAiHealth: async () => {
+    const response = await api.get('/ai/health');
+    return response.data;
+  },
+
   /**
    * Get AI-generated task schedule
    * @returns {Promise<Object>} AI schedule with prioritized tasks

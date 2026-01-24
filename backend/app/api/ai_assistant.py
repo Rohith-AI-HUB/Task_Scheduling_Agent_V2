@@ -24,6 +24,7 @@ from app.models.chat import (
     CreditResetResponse,
 )
 from app.services.chat_service import get_chat_service
+from app.services.groq_service import groq_service
 from app.services.credit_service import CreditService
 from app.utils.dependencies import get_current_user, get_current_student, get_current_teacher
 from app.database.connection import get_database
@@ -78,7 +79,15 @@ async def optimize_schedule(response: Response, current_student: dict = Depends(
 
 @router.get("/health")
 async def health():
-    return {"status": "ok", "service": "ai_assistant"}
+    return {
+        "status": "ok",
+        "service": "ai_assistant",
+        "groq_available": groq_service.is_available(),
+        "groq_model": getattr(groq_service, "model", None),
+        "groq_role_limits": getattr(groq_service, "role_quota_limiter", None).get_limits()
+        if getattr(groq_service, "role_quota_limiter", None)
+        else None,
+    }
 
 
 # ========================================
@@ -121,6 +130,16 @@ async def send_chat_message(
                     "error_code": "NO_CREDITS",
                     "credits_remaining": 0
                 }
+            )
+
+        if result.get("error") == "GROQ_NOT_CONFIGURED":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "error": result["response"],
+                    "error_code": "GROQ_NOT_CONFIGURED",
+                    "credits_remaining": result.get("credits_remaining"),
+                },
             )
 
         return ChatResponse(

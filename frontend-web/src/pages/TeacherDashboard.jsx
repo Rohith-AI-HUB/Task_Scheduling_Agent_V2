@@ -16,6 +16,8 @@ const TeacherDashboard = () => {
   const [extensions, setExtensions] = useState([]);
   const [stats, setStats] = useState({ active: 0, enrolled: 0 });
   const [upcomingDays, setUpcomingDays] = useState(14);
+  const [subjectRoster, setSubjectRoster] = useState({});
+  const subjectRosterLoadingRef = useRef({});
   
   // Loading States
   const [_isLoading, setIsLoading] = useState(true);
@@ -97,6 +99,15 @@ const TeacherDashboard = () => {
      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   };
 
+  const getInitials = (value) => {
+    const v = String(value || '').trim();
+    if (!v) return '?';
+    const parts = v.split(/\s+/).filter(Boolean);
+    const chars = parts.slice(0, 2).map((p) => p[0]).filter(Boolean);
+    if (chars.length === 0) return v[0]?.toUpperCase?.() || '?';
+    return chars.join('').toUpperCase();
+  };
+
   // Data Fetching
   const loadAllData = useCallback(async ({ silent } = {}) => {
     if (inFlightRef.current) return;
@@ -141,6 +152,25 @@ const TeacherDashboard = () => {
     }
   }, [upcomingDays]);
 
+  const loadSubjectRoster = useCallback(
+    async (subjectId) => {
+      if (!subjectId) return;
+      if (subjectRoster[subjectId]) return;
+      if (subjectRosterLoadingRef.current[subjectId]) return;
+      subjectRosterLoadingRef.current[subjectId] = true;
+      try {
+        const res = await api.get(`/subjects/${subjectId}/roster`);
+        const items = Array.isArray(res.data) ? res.data : [];
+        setSubjectRoster((prev) => ({ ...prev, [subjectId]: items }));
+      } catch (_err) {
+        setSubjectRoster((prev) => ({ ...prev, [subjectId]: [] }));
+      } finally {
+        subjectRosterLoadingRef.current[subjectId] = false;
+      }
+    },
+    [subjectRoster]
+  );
+
   useEffect(() => {
     loadAllData({ silent: false });
     
@@ -169,6 +199,12 @@ const TeacherDashboard = () => {
       (s.code || '').toLowerCase().includes(q)
     );
   }, [subjects, search]);
+
+  useEffect(() => {
+    filteredSubjects.slice(0, 5).forEach((s) => {
+      loadSubjectRoster(s?.id);
+    });
+  }, [filteredSubjects, loadSubjectRoster]);
 
   // Actions
   const handleLogout = async () => {
@@ -455,21 +491,40 @@ const TeacherDashboard = () => {
             </div>
             <div className="flex-1 flex gap-4 overflow-x-auto pb-2 scroll-smooth">
               {filteredSubjects.slice(0, 5).map(subject => (
-                <div key={subject.id} className="min-w-[260px] bg-slate-50 rounded-xl p-5 border border-slate-100 flex flex-col justify-between">
+                <div
+                  key={subject.id}
+                  className="min-w-[260px] bg-slate-50 rounded-xl p-5 border border-slate-100 flex flex-col justify-between cursor-pointer hover:border-primary/30 hover:bg-white transition-colors"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(`/subject/${subject.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      navigate(`/subject/${subject.id}`);
+                    }
+                  }}
+                >
                   <div>
                     <div className="flex justify-between items-start mb-2">
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary uppercase">
                         {subject.code || 'NO CODE'}
                       </span>
                       <button 
-                        onClick={() => { setEditSubject(subject); setEditData({ name: subject.name, code: subject.code }); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditSubject(subject);
+                          setEditData({ name: subject.name, code: subject.code });
+                        }}
                         className="text-slate-300 hover:text-slate-500"
                       >
                         <span className="material-symbols-outlined">more_vert</span>
                       </button>
                     </div>
                     <button 
-                      onClick={() => navigate(`/subject/${subject.id}`)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/subject/${subject.id}`);
+                      }}
                       className="font-bold text-slate-800 text-left hover:text-primary transition-colors line-clamp-1"
                     >
                       {subject.name}
@@ -478,15 +533,46 @@ const TeacherDashboard = () => {
                   </div>
                   <div className="mt-6 flex items-center justify-between">
                     <div className="flex -space-x-2">
-                       {/* Avatar placeholders */}
-                      <div className="w-6 h-6 rounded-full bg-slate-200 border-2 border-white"></div>
-                      <div className="w-6 h-6 rounded-full bg-slate-300 border-2 border-white"></div>
-                      <div className="w-6 h-6 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[8px] font-bold">
-                        +{Math.max(0, (Number(subject.student_count) || 0) - 2)}
-                      </div>
+                      {(() => {
+                        const total = Number(subject.student_count) || 0;
+                        const roster = subjectRoster?.[subject.id];
+                        const rosterItems = Array.isArray(roster) ? roster : null;
+                        const actualCount = rosterItems ? Math.min(2, rosterItems.length) : 0;
+                        const placeholderCount = rosterItems ? Math.max(0, Math.min(2, total) - actualCount) : Math.min(2, total);
+                        const extra = Math.max(0, total - (actualCount + placeholderCount));
+
+                        return (
+                          <>
+                            {rosterItems &&
+                              rosterItems.slice(0, actualCount).map((m, idx) => (
+                                <div
+                                  key={m?.uid || `${subject.id}-student-${idx}`}
+                                  className="w-6 h-6 rounded-full bg-primary/10 text-primary border-2 border-white flex items-center justify-center text-[8px] font-bold"
+                                  title={m?.name || m?.email || ''}
+                                >
+                                  {getInitials(m?.name || m?.email)}
+                                </div>
+                              ))}
+                            {Array.from({ length: placeholderCount }).map((_, idx) => (
+                              <div
+                                key={`${subject.id}-placeholder-${idx}`}
+                                className="w-6 h-6 rounded-full bg-slate-200 border-2 border-white"
+                              ></div>
+                            ))}
+                            {extra > 0 && (
+                              <div className="w-6 h-6 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[8px] font-bold">
+                                +{extra}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                     <button 
-                      onClick={() => handleCopyCode(subject)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopyCode(subject);
+                      }}
                       className="text-primary font-bold text-xs"
                     >
                       {copyState.subjectId === subject.id ? (

@@ -12,11 +12,9 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 logger = logging.getLogger(__name__)
 
-
-# Credit limits by role
-CREDIT_LIMITS = {
+_CREDIT_LIMITS = {
     "student": 25,
-    "teacher": 50
+    "teacher": 50,
 }
 
 
@@ -26,6 +24,10 @@ class CreditService:
     def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
         self.collection = db.ai_credits
+
+    def _get_credit_limit(self, role: str) -> int:
+        r = str(role or "student").lower()
+        return _CREDIT_LIMITS.get(r, _CREDIT_LIMITS["student"])
 
     async def ensure_indexes(self):
         """Create necessary database indexes"""
@@ -44,7 +46,7 @@ class CreditService:
         record = await self.collection.find_one({"user_uid": user_uid})
 
         now = datetime.utcnow()
-        credit_limit = CREDIT_LIMITS.get(role, CREDIT_LIMITS["student"])
+        credit_limit = self._get_credit_limit(role)
 
         # Calculate next reset time (midnight UTC)
         tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
@@ -81,6 +83,12 @@ class CreditService:
                     }
                 )
                 record["credits_used"] = 0
+                record["credits_limit"] = credit_limit
+            elif record.get("credits_limit") != credit_limit:
+                await self.collection.update_one(
+                    {"user_uid": user_uid},
+                    {"$set": {"credits_limit": credit_limit, "updated_at": now, "role": role}},
+                )
                 record["credits_limit"] = credit_limit
 
         credits_remaining = max(0, record.get("credits_limit", credit_limit) - record.get("credits_used", 0))
@@ -152,7 +160,7 @@ class CreditService:
         }
 
         if role:
-            update_data["credits_limit"] = CREDIT_LIMITS.get(role, CREDIT_LIMITS["student"])
+            update_data["credits_limit"] = self._get_credit_limit(role)
             update_data["role"] = role
 
         result = await self.collection.update_one(
@@ -162,7 +170,7 @@ class CreditService:
 
         if result.matched_count == 0:
             # User doesn't have a credit record yet - create one
-            credit_limit = CREDIT_LIMITS.get(role or "student", CREDIT_LIMITS["student"])
+            credit_limit = self._get_credit_limit(role or "student")
             await self.collection.insert_one({
                 "user_uid": user_uid,
                 "role": role or "student",

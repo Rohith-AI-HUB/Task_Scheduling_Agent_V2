@@ -44,9 +44,9 @@ INTENT_KEYWORDS = {
         "what's up", "whats up"
     ],
     ChatIntent.OUT_OF_SCOPE: [
-        "solve", "answer", "explain the concept", "how to code",
-        "teach me", "tutorial", "help me solve", "do my homework",
-        "write code", "fix my code", "debug", "weather", "news",
+        "solve", "answer", "explain", "explain about", "explain the concept", "what is", "define", "tell me about",
+        "how to code", "teach me", "tutorial", "help me solve", "do my homework",
+        "write code", "fix my code", "debug", "fastapi", "fast api", "weather", "news",
         "joke", "story", "game"
     ]
 }
