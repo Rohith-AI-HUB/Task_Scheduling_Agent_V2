@@ -601,15 +601,15 @@ const TeacherDashboard = () => {
           {/* Stats */}
           <div className="col-span-6 md:col-span-3 lg:col-span-2 row-span-2 space-y-6">
             <div className="h-[calc(50%-12px)] bento-card p-6 flex flex-col justify-center items-center text-center">
-              <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-2">
-                <span className="material-symbols-outlined text-2xl">book</span>
+              <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-2 shadow-sm ring-1 ring-primary/20">
+                <span className="material-symbols-outlined text-[22px]">book</span>
               </div>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Subjects</p>
               <h3 className="text-2xl font-bold mt-1">{stats.active}</h3>
             </div>
             <div className="h-[calc(50%-12px)] bento-card p-6 flex flex-col justify-center items-center text-center">
-              <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center mb-2">
-                <span className="material-symbols-outlined text-2xl">groups</span>
+              <div className="w-10 h-10 rounded-full bg-green-100 text-green-700 flex items-center justify-center mb-2 shadow-sm ring-1 ring-green-200">
+                <span className="material-symbols-outlined text-[22px]">groups</span>
               </div>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enrolled</p>
               <h3 className="text-2xl font-bold mt-1">{stats.enrolled}</h3>
