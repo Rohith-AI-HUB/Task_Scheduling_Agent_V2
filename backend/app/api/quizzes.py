@@ -16,7 +16,7 @@ from app.models.submission import (
     SubmissionResponse,
 )
 from app.models.task import QuizQuestion
-from app.services.groq_service import groq_service
+from app.services.groq_service import GroqServiceError, RateLimitExceeded, groq_service
 from app.utils.dependencies import get_current_student, get_current_teacher
 
 router = APIRouter()
@@ -97,35 +97,36 @@ async def generate_quiz_questions(
             user_uid=current_teacher["uid"],
             document_content=request.document_content,
             topic=request.topic,
-            num_questions=request.num_questions
+            num_questions=request.num_questions,
         )
 
         if not questions:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to generate questions. Please try again."
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="AI returned no questions. Please try again.",
             )
 
-        # Convert to QuizQuestion model
-        quiz_questions = []
-        for q in questions:
-            quiz_questions.append(
-                QuizQuestion(
-                    question=q.get("question", ""),
-                    options=q.get("options", []),
-                    correct_answer=q.get("correct_answer", 0),
-                    explanation=q.get("explanation"),
-                    difficulty=q.get("difficulty", "medium"),
-                    points=1  # Default 1 point per question
-                )
+        quiz_questions = [
+            QuizQuestion(
+                question=q.get("question", ""),
+                options=q.get("options", []),
+                correct_answer=q.get("correct_answer", 0),
+                explanation=q.get("explanation"),
+                difficulty=q.get("difficulty", "medium"),
+                points=1,
             )
-
+            for q in questions
+        ]
         return quiz_questions
 
+    except RateLimitExceeded as e:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
+    except GroqServiceError as e:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error generating quiz questions: {str(e)}"
+            detail=f"Error generating quiz questions: {str(e)}",
         )
 
 

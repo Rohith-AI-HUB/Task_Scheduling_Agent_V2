@@ -46,24 +46,30 @@ api.interceptors.response.use(
     if (error.response) {
       // Server responded with error status
       const { status, data } = error.response;
+      const message =
+        data?.detail ||
+        data?.message ||
+        data?.error ||
+        (typeof data === 'string' ? data : null) ||
+        'Unknown error';
 
       switch (status) {
         case 401:
           // Unauthorized - redirect to login
-          console.error('Unauthorized access');
+          console.error('Unauthorized access:', message);
           // You might want to redirect to login page here
           break;
         case 403:
-          console.error('Forbidden access');
+          console.error('Forbidden access:', message);
           break;
         case 404:
-          console.error('Resource not found');
+          console.error('Resource not found:', message);
           break;
         case 500:
-          console.error('Server error');
+          console.error('Server error:', message);
           break;
         default:
-          console.error('API error:', data.message || 'Unknown error');
+          console.error('API error:', message);
       }
     } else if (error.request) {
       // Request made but no response

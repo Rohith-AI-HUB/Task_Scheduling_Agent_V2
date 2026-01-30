@@ -1099,25 +1099,151 @@ const TaskView = () => {
                       </div>
                     </div>
 
-                    <div className="bg-white dark:bg-background-dark border border-[#d5cee9] dark:border-white/10 rounded-xl overflow-hidden mb-8 shadow-sm">
-                      <div className="px-6 py-5 border-b border-[#d5cee9] dark:border-white/10 bg-gray-50/50 dark:bg-white/5 flex items-center justify-between gap-4">
-                        <h2 className="text-[#110d1c] dark:text-white text-xl font-bold leading-tight tracking-tight">
-                          Your Submission
-                        </h2>
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs font-semibold px-2 py-1 bg-primary/10 text-primary rounded">
-                            {mySubmission ? 'Submitted' : 'Draft'}
-                          </span>
-                          <button
-                            className="px-4 py-2 rounded-lg border border-[#d5cee9] dark:border-white/10 hover:border-primary/40 transition-colors text-sm font-bold"
-                            onClick={loadSubmissions}
-                            disabled={submissionLoading}
-                            type="button"
-                          >
-                            Refresh
-                          </button>
+                    {/* Quiz Section */}
+                    {task?.task_type === 'Quiz' ? (
+                      <div className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border border-purple-200 dark:border-purple-700 rounded-xl overflow-hidden mb-8 shadow-lg">
+                        <div className="px-6 py-5 border-b border-purple-200 dark:border-purple-700 bg-gradient-to-r from-purple-100/50 to-blue-100/50 dark:from-purple-900/30 dark:to-blue-900/30">
+                          <h2 className="text-[#110d1c] dark:text-white text-xl font-bold leading-tight tracking-tight flex items-center gap-2">
+                            <span className="material-symbols-outlined text-purple-600 dark:text-purple-400">quiz</span>
+                            Quiz
+                          </h2>
+                        </div>
+                        <div className="p-8">
+                          {mySubmission?.evaluation?.quiz_metrics ? (
+                            /* Quiz Already Completed */
+                            <div className="space-y-6">
+                              <div className="text-center">
+                                <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 mb-4">
+                                  <span className="material-symbols-outlined text-4xl text-green-600 dark:text-green-400">check_circle</span>
+                                </div>
+                                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Quiz Completed!</h3>
+                                <p className="text-gray-600 dark:text-gray-400">You have already submitted this quiz.</p>
+                              </div>
+
+                              {mySubmission.evaluation.quiz_metrics.locked_out ? (
+                                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                                  <div className="flex items-start gap-3">
+                                    <span className="material-symbols-outlined text-red-600 dark:text-red-400">block</span>
+                                    <div>
+                                      <h4 className="font-bold text-red-900 dark:text-red-100 mb-1">Locked Out</h4>
+                                      <p className="text-sm text-red-700 dark:text-red-300">
+                                        You were locked out due to malpractice detection. Score: 0%
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center">
+                                    <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
+                                      {mySubmission.evaluation.quiz_metrics.score_percentage?.toFixed(1) || 0}%
+                                    </div>
+                                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Score</div>
+                                  </div>
+                                  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center">
+                                    <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
+                                      {mySubmission.evaluation.quiz_metrics.correct_answers || 0}/{mySubmission.evaluation.quiz_metrics.total_questions || 0}
+                                    </div>
+                                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Correct</div>
+                                  </div>
+                                  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center">
+                                    <div className="text-3xl font-bold text-green-600 dark:text-green-400">
+                                      {mySubmission.evaluation.quiz_metrics.earned_points || 0}/{mySubmission.evaluation.quiz_metrics.total_points || 0}
+                                    </div>
+                                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Points</div>
+                                  </div>
+                                  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-center">
+                                    <div className="text-3xl font-bold text-gray-600 dark:text-gray-400">
+                                      {Math.floor((mySubmission.evaluation.quiz_metrics.time_taken_seconds || 0) / 60)}m
+                                    </div>
+                                    <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Time</div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {mySubmission.feedback && (
+                                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                                  <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Feedback:</h4>
+                                  <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{mySubmission.feedback}</p>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            /* Start Quiz */
+                            <div className="text-center space-y-6">
+                              <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-purple-100 dark:bg-purple-900/30 mb-4">
+                                <span className="material-symbols-outlined text-4xl text-purple-600 dark:text-purple-400">quiz</span>
+                              </div>
+                              <div>
+                                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Ready to Start?</h3>
+                                <p className="text-gray-600 dark:text-gray-400 mb-4">
+                                  This quiz must be completed in one sitting. Make sure you have enough time.
+                                </p>
+                              </div>
+
+                              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700 max-w-md mx-auto">
+                                <div className="space-y-3 text-left">
+                                  <div className="flex items-center gap-3">
+                                    <span className="material-symbols-outlined text-purple-600 dark:text-purple-400">timer</span>
+                                    <span className="text-sm text-gray-700 dark:text-gray-300">
+                                      Time Limit: <strong>{task.evaluation_config?.quiz?.time_limit_minutes || 30} minutes</strong>
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <span className="material-symbols-outlined text-purple-600 dark:text-purple-400">help</span>
+                                    <span className="text-sm text-gray-700 dark:text-gray-300">
+                                      Questions: <strong>{task.evaluation_config?.quiz?.questions?.length || 0}</strong>
+                                    </span>
+                                  </div>
+                                  {task.evaluation_config?.quiz?.enable_anti_cheating && (
+                                    <div className="flex items-center gap-3">
+                                      <span className="material-symbols-outlined text-orange-600 dark:text-orange-400">security</span>
+                                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                                        Anti-cheating enabled (Fullscreen required)
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <button
+                                onClick={() => navigate(`/quiz/${id}`)}
+                                className="px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold rounded-xl shadow-lg shadow-purple-500/30 transition-all text-lg flex items-center justify-center gap-2 mx-auto"
+                                type="button"
+                              >
+                                <span className="material-symbols-outlined">play_arrow</span>
+                                Start Quiz
+                              </button>
+
+                              <p className="text-xs text-gray-500">
+                                Once you start, you cannot pause or exit. Malpractice detection is active.
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
+                    ) : (
+                      <>
+                      /* Regular Assignment Submission */
+                      <div className="bg-white dark:bg-background-dark border border-[#d5cee9] dark:border-white/10 rounded-xl overflow-hidden mb-8 shadow-sm">
+                        <div className="px-6 py-5 border-b border-[#d5cee9] dark:border-white/10 bg-gray-50/50 dark:bg-white/5 flex items-center justify-between gap-4">
+                          <h2 className="text-[#110d1c] dark:text-white text-xl font-bold leading-tight tracking-tight">
+                            Your Submission
+                          </h2>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-semibold px-2 py-1 bg-primary/10 text-primary rounded">
+                              {mySubmission ? 'Submitted' : 'Draft'}
+                            </span>
+                            <button
+                              className="px-4 py-2 rounded-lg border border-[#d5cee9] dark:border-white/10 hover:border-primary/40 transition-colors text-sm font-bold"
+                              onClick={loadSubmissions}
+                              disabled={submissionLoading}
+                              type="button"
+                            >
+                              Refresh
+                            </button>
+                          </div>
+                        </div>
                       <div className="p-6">
                         <div className="flex flex-col gap-4">
                           <textarea
@@ -1167,7 +1293,7 @@ const TaskView = () => {
                                   <span className="material-symbols-outlined">attach_file</span>
                                   Attachments
                                 </div>
-                                <div className="text-xs text-gray-500 mt-1">Drag & drop or browse. PDF, JPG, PNG, ZIP (Max 25MB)</div>
+                                <div className="text-xs text-gray-500 mt-1">Drag & drop or browse. PDF, DOCX, PPTX, JPG, PNG, ZIP (Max 25MB)</div>
                               </div>
                               <div className="flex items-center gap-3">
                                 <input
@@ -1175,7 +1301,7 @@ const TaskView = () => {
                                   type="file"
                                   multiple
                                   className="hidden"
-                                  accept=".pdf,.jpg,.jpeg,.png,.zip,application/pdf,image/jpeg,image/png,application/zip"
+                                  accept=".pdf,.jpg,.jpeg,.png,.zip,.docx,.pptx,.doc,.ppt,application/pdf,image/jpeg,image/png,application/zip,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/msword,application/vnd.ms-powerpoint"
                                   onChange={(e) => uploadFiles(e.target.files)}
                                   disabled={attachmentsUploading}
                                 />
@@ -1224,25 +1350,27 @@ const TaskView = () => {
                       </div>
                     </div>
 
-                    <div className="flex flex-col gap-4 mb-12">
-                      <button
-                        className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 px-6 rounded-xl shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
-                        onClick={submitOrUpdate}
-                        disabled={
-                          !submissionContent.trim() ||
-                          isSubmitting ||
-                          submissionLoading ||
-                          (task?.type === 'group' && !myGroup?.id)
-                        }
-                        type="button"
-                      >
-                        <span className="material-symbols-outlined">send</span>
-                        {isSubmitting ? 'Submitting...' : mySubmission ? 'Resubmit Assignment' : 'Submit Assignment'}
-                      </button>
-                      <p className="text-center text-sm text-gray-500">
-                        By clicking submit, you agree to the academic integrity policy. You can resubmit until the deadline.
-                      </p>
-                    </div>
+                        <div className="flex flex-col gap-4 mb-12">
+                          <button
+                            className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 px-6 rounded-xl shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                            onClick={submitOrUpdate}
+                            disabled={
+                              !submissionContent.trim() ||
+                              isSubmitting ||
+                              submissionLoading ||
+                              (task?.type === 'group' && !myGroup?.id)
+                            }
+                            type="button"
+                          >
+                            <span className="material-symbols-outlined">send</span>
+                            {isSubmitting ? 'Submitting...' : mySubmission ? 'Resubmit Assignment' : 'Submit Assignment'}
+                          </button>
+                          <p className="text-center text-sm text-gray-500">
+                            By clicking submit, you agree to the academic integrity policy. You can resubmit until the deadline.
+                          </p>
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </div>

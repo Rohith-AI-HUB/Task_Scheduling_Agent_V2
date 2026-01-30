@@ -932,18 +932,47 @@ Always output valid JSON array only."""
         fallback = []
 
         try:
-            response = await self.safe_call(
-                feature="test_generation",
-                user_uid=user_uid,
-                prompt=prompt,
-                system_prompt=system_prompt,
-                fallback="[]",
-                use_cache=True,  # Cache quiz generation to reduce costs
-                cache_ttl=7200,  # 2 hours
-                max_tokens=3000,  # Allow more tokens for longer quizzes
-                temperature=0.6,  # Slightly creative for varied questions
-                use_grading_key=True
-            )
+            client = self.grading_client or self.client
+            if not client:
+                raise GroqServiceError("Groq client not initialized")
+
+            role = "teacher"
+
+            if not self.rate_limiter.check_limit(user_uid, "test_generation"):
+                raise RateLimitExceeded("Rate limit exceeded for quiz generation. Please try again later.")
+
+            if not self.role_quota_limiter.check_limit(role):
+                raise RateLimitExceeded("Global Groq quota exceeded for your role. Please try again later.")
+
+            cache_key = None
+            if settings.groq_enable_caching:
+                cache_key = self._generate_cache_key(
+                    "test_generation",
+                    {"document_content": content_preview, "topic": topic, "num_questions": num_questions},
+                )
+                cached_response = self.cache.get(cache_key)
+                if cached_response:
+                    response = cached_response
+                else:
+                    response = await self._call_groq(
+                        prompt=prompt,
+                        system_prompt=system_prompt,
+                        max_tokens=3000,
+                        temperature=0.6,
+                        client=client,
+                    )
+                    self.cache.set(cache_key, response, 7200)
+            else:
+                response = await self._call_groq(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    max_tokens=3000,
+                    temperature=0.6,
+                    client=client,
+                )
+
+            self.rate_limiter.record_usage(user_uid, "test_generation")
+            self.role_quota_limiter.record_usage(role)
 
             # Clean up response
             response = response.strip()
@@ -977,10 +1006,12 @@ Always output valid JSON array only."""
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to decode quiz questions JSON: {e}")
-            return fallback
+            raise GroqServiceError("AI returned invalid JSON for quiz questions")
+        except (GroqServiceError, RateLimitExceeded):
+            raise
         except Exception as e:
             logger.error(f"Error generating quiz questions: {e}")
-            return fallback
+            raise GroqServiceError(str(e))
 
 
 # Create singleton instance

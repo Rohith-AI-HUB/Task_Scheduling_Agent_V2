@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
+import api from '../services/api';
 
 const QuizAttempt = () => {
   const { taskId } = useParams();
@@ -13,7 +13,6 @@ const QuizAttempt = () => {
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [malpracticeEvents, setMalpracticeEvents] = useState([]);
-  const [submissionId, setSubmissionId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const startTimeRef = useRef(null);
@@ -28,18 +27,16 @@ const QuizAttempt = () => {
 
     const startQuiz = async () => {
       try {
-        const token = localStorage.getItem('authToken');
-        const response = await axios.post(
-          `${import.meta.env.VITE_API_URL}/api/quizzes/start?task_id=${taskId}`,
+        const response = await api.post(
+          '/quizzes/start',
           {},
           {
-            headers: { Authorization: `Bearer ${token}` }
+            params: { task_id: taskId },
           }
         );
 
         const data = response.data;
         setQuizData(data);
-        setSubmissionId(data.submission_id);
         setAnswers(new Array(data.questions.length).fill(-1));
         setTimeRemaining(data.time_limit_minutes * 60);
         startTimeRef.current = Date.now();
@@ -220,20 +217,12 @@ const QuizAttempt = () => {
 
     try {
       const timeTaken = Math.floor((Date.now() - startTimeRef.current) / 1000);
-      const token = localStorage.getItem('authToken');
-
-      await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/quizzes/submit`,
-        {
-          task_id: taskId,
-          answers: answers,
-          time_taken_seconds: timeTaken,
-          malpractice_events: malpracticeEvents
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
+      await api.post('/quizzes/submit', {
+        task_id: taskId,
+        answers,
+        time_taken_seconds: timeTaken,
+        malpractice_events: malpracticeEvents,
+      });
 
       exitFullscreen();
 

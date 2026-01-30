@@ -9,6 +9,7 @@ import StudentDashboard from './pages/StudentDashboard';
 import TeacherClassrooms from './pages/TeacherClassrooms';
 import SubjectView from './pages/SubjectView';
 import TaskView from './pages/TaskView';
+import QuizAttempt from './pages/QuizAttempt';
 import Profile from './pages/Profile';
 import Calendar from './pages/Calendar';
 
@@ -74,6 +75,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <TaskView />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/quiz/:taskId"
+            element={
+              <ProtectedRoute requireRole="student">
+                <QuizAttempt />
               </ProtectedRoute>
             }
           />

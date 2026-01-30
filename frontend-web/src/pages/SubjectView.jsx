@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import QuizGenerator from '../components/QuizGenerator';
 
 const SubjectView = () => {
   const { id } = useParams();
@@ -45,6 +46,14 @@ const SubjectView = () => {
   const [extensionError, setExtensionError] = useState('');
   const [extensionSubmitting, setExtensionSubmitting] = useState(false);
   const [extensionSuccess, setExtensionSuccess] = useState('');
+
+  // Quiz Generator States
+  const [isQuizGeneratorOpen, setIsQuizGeneratorOpen] = useState(false);
+  const [quizQuestions, setQuizQuestions] = useState([]);
+  const [quizTimeLimit, setQuizTimeLimit] = useState('30');
+  const [quizShuffleQuestions, setQuizShuffleQuestions] = useState(true);
+  const [quizShuffleOptions, setQuizShuffleOptions] = useState(true);
+  const [quizEnableAntiCheating, setQuizEnableAntiCheating] = useState(true);
 
   const getErrorMessage = (err, fallback) => {
     const detail = err?.response?.data?.detail;
@@ -851,7 +860,6 @@ const SubjectView = () => {
                     {visibleTasks.map((task) => {
                       const resource = isResourceTask(task);
                       const status = getStudentTaskStatus(task);
-                      const submission = mySubmissionByTaskId.get(task.id);
                       const badge = resource
                         ? {
                             className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
@@ -1208,6 +1216,106 @@ const SubjectView = () => {
                     <option value="Extra Credit">Extra Credit</option>
                   </select>
                 </div>
+
+                {/* Quiz Configuration Section */}
+                {taskType === 'Quiz' && (
+                  <div className="md:col-span-2 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-purple-900 dark:text-purple-100">Quiz Configuration</h4>
+                      <button
+                        type="button"
+                        onClick={() => setIsQuizGeneratorOpen(true)}
+                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold text-sm flex items-center gap-2"
+                        disabled={taskCreating}
+                      >
+                        <span className="material-symbols-outlined text-lg">auto_awesome</span>
+                        Generate Questions with AI
+                      </button>
+                    </div>
+
+                    {quizQuestions.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold text-purple-900 dark:text-purple-100">
+                            {quizQuestions.length} Question(s) Ready
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setQuizQuestions([])}
+                            className="text-xs text-red-600 hover:text-red-800 dark:text-red-400"
+                          >
+                            Clear All
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                              Time Limit (minutes)
+                            </label>
+                            <input
+                              type="number"
+                              min="5"
+                              max="180"
+                              value={quizTimeLimit}
+                              onChange={(e) => setQuizTimeLimit(e.target.value)}
+                              className="w-full px-3 py-2 rounded border-gray-300 dark:border-gray-600 dark:bg-gray-800 text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={quizShuffleQuestions}
+                              onChange={(e) => setQuizShuffleQuestions(e.target.checked)}
+                              className="rounded"
+                            />
+                            <span className="text-gray-700 dark:text-gray-300">Shuffle Questions</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={quizShuffleOptions}
+                              onChange={(e) => setQuizShuffleOptions(e.target.checked)}
+                              className="rounded"
+                            />
+                            <span className="text-gray-700 dark:text-gray-300">Shuffle Answer Options</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={quizEnableAntiCheating}
+                              onChange={(e) => setQuizEnableAntiCheating(e.target.checked)}
+                              className="rounded"
+                            />
+                            <span className="text-gray-700 dark:text-gray-300">Enable Anti-Cheating (Fullscreen + Monitoring)</span>
+                          </label>
+                        </div>
+
+                        <div className="bg-white dark:bg-gray-800 p-3 rounded border border-purple-200 dark:border-purple-700 max-h-48 overflow-y-auto">
+                          <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Question Preview:</p>
+                          {quizQuestions.slice(0, 3).map((q, idx) => (
+                            <div key={idx} className="text-xs text-gray-700 dark:text-gray-300 mb-2">
+                              <span className="font-semibold">Q{idx + 1}:</span> {q.question.substring(0, 60)}...
+                            </div>
+                          ))}
+                          {quizQuestions.length > 3 && (
+                            <p className="text-xs text-gray-500 italic">+ {quizQuestions.length - 3} more...</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {quizQuestions.length === 0 && (
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Click "Generate Questions with AI" to create quiz questions from your study materials.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div className="md:col-span-2">
                   <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
                     Description
@@ -1407,6 +1515,20 @@ const SubjectView = () => {
                       payload.problem_statements = problems;
                       payload.group_settings = { group_size: size, shuffle: true };
                     }
+                    // Add quiz evaluation config if this is a quiz
+                    if (taskType === 'Quiz' && quizQuestions.length > 0) {
+                      payload.evaluation_config = {
+                        quiz: {
+                          questions: quizQuestions,
+                          time_limit_minutes: Number(quizTimeLimit) || 30,
+                          enable_fullscreen: true,
+                          enable_anti_cheating: quizEnableAntiCheating,
+                          shuffle_questions: quizShuffleQuestions,
+                          shuffle_options: quizShuffleOptions,
+                          passing_score: 60
+                        }
+                      };
+                    }
                     const response = await api.post('/tasks', payload);
                     setTasks((prev) => [response.data, ...prev]);
                     setTaskTitle('');
@@ -1419,6 +1541,11 @@ const SubjectView = () => {
                     setProblemStatements(['']);
                     setBulkProblems('');
                     setPreviewNonce(0);
+                    setQuizQuestions([]);
+                    setQuizTimeLimit('30');
+                    setQuizShuffleQuestions(true);
+                    setQuizShuffleOptions(true);
+                    setQuizEnableAntiCheating(true);
                     setIsCreateTaskOpen(false);
                   } catch (err) {
                     setTaskCreateError(getErrorMessage(err, 'Failed to create task'));
@@ -1438,6 +1565,16 @@ const SubjectView = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Quiz Generator Modal */}
+      {isQuizGeneratorOpen && (
+        <QuizGenerator
+          onQuestionsGenerated={(questions) => {
+            setQuizQuestions(questions);
+          }}
+          onClose={() => setIsQuizGeneratorOpen(false)}
+        />
       )}
     </div>
   );

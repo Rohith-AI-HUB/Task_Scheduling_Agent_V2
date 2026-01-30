@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 
 const QuizGenerator = ({ onQuestionsGenerated, onClose }) => {
   const [documentText, setDocumentText] = useState('');
@@ -53,24 +53,22 @@ const QuizGenerator = ({ onQuestionsGenerated, onClose }) => {
     setError('');
 
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/quizzes/generate`,
-        {
-          document_content: documentText,
-          topic: topic,
-          num_questions: numQuestions
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
+      const response = await api.post('/quizzes/generate', {
+        document_content: documentText,
+        topic,
+        num_questions: numQuestions,
+      });
 
       onQuestionsGenerated(response.data);
       onClose();
     } catch (err) {
       console.error('Error generating questions:', err);
-      setError(err.response?.data?.detail || 'Failed to generate questions');
+      setError(
+        err?.response?.data?.detail ||
+          err?.response?.data?.message ||
+          err?.message ||
+          'Failed to generate questions'
+      );
     } finally {
       setLoading(false);
     }
