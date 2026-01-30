@@ -344,6 +344,21 @@ const TaskView = () => {
     loadGroups();
   }, [id, userRole, task?.type]);
 
+  const goBack = () => {
+    const idx = window.history?.state?.idx;
+    if (typeof idx === 'number' && idx > 0) {
+      navigate(-1);
+      return;
+    }
+
+    if (task?.subject_id) {
+      navigate(`/subject/${task.subject_id}`);
+      return;
+    }
+
+    navigate(userRole === 'teacher' ? '/teacher/dashboard' : '/student/dashboard');
+  };
+
   return (
     <div className="bg-background-light dark:bg-background-dark text-[#110d1c] dark:text-white h-screen overflow-y-auto overflow-x-hidden font-display">
       {userRole === 'teacher' ? (
@@ -360,7 +375,8 @@ const TaskView = () => {
                 <nav className="hidden md:flex items-center gap-4 ml-8">
                   <button
                     className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors"
-                    onClick={() => navigate(-1)}
+                    onClick={goBack}
+                    type="button"
                   >
                     <span className="material-symbols-outlined text-lg">arrow_back</span>
                     Back
@@ -683,6 +699,38 @@ const TaskView = () => {
                       {submissions.map((s) => {
                         const isUngraded = s?.score === null || s?.score === undefined;
                         const group = s?.group_id ? groupById.get(s.group_id) : null;
+                        const isQuizSubmission = !!s?.evaluation?.quiz_metrics || task?.task_type === 'Quiz';
+                        const lockedOut = !!s?.evaluation?.quiz_metrics?.locked_out;
+                        const violationsCount =
+                          Array.isArray(s?.evaluation?.quiz_metrics?.malpractice_events)
+                            ? s.evaluation.quiz_metrics.malpractice_events.length
+                            : 0;
+                        const numericScore = typeof s?.score === 'number' ? s.score : null;
+                        const aiScore = typeof s?.evaluation?.ai_score === 'number' ? s.evaluation.ai_score : null;
+                        const totalTaskPoints = typeof task?.points === 'number' ? task.points : null;
+                        const scoreLabel = (() => {
+                          if (numericScore === null) return null;
+                          if (isQuizSubmission) {
+                            const pct = numericScore;
+                            const pctLabel = `${pct.toFixed(1)}%`;
+                            if (typeof totalTaskPoints === 'number' && totalTaskPoints > 0) {
+                              const derived = (pct / 100) * totalTaskPoints;
+                              return `${pctLabel} (${derived.toFixed(1)}/${totalTaskPoints})`;
+                            }
+                            return pctLabel;
+                          }
+                          if (typeof totalTaskPoints === 'number' && totalTaskPoints > 0) {
+                            const raw =
+                              Math.round(numericScore) === numericScore
+                                ? String(numericScore)
+                                : numericScore.toFixed(2).replace(/\.?0+$/, '');
+                            return `${raw}/${totalTaskPoints}`;
+                          }
+                          return Math.round(numericScore) === numericScore
+                            ? String(numericScore)
+                            : numericScore.toFixed(2).replace(/\.?0+$/, '');
+                        })();
+                        const markLabel = scoreLabel || (aiScore !== null ? `${aiScore}% (AI)` : null);
 
                         return (
                           <div
@@ -708,6 +756,21 @@ const TaskView = () => {
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
+                                {lockedOut ? (
+                                  <span className="text-xs font-semibold px-2 py-1 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                                    Locked out
+                                  </span>
+                                ) : null}
+                                {violationsCount > 0 ? (
+                                  <span className="text-xs font-semibold px-2 py-1 rounded bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">
+                                    Violations: {violationsCount}
+                                  </span>
+                                ) : null}
+                                {markLabel ? (
+                                  <span className="text-xs font-semibold px-2 py-1 rounded bg-primary/10 text-primary">
+                                    Marks: {markLabel}
+                                  </span>
+                                ) : null}
 
                                 <span
                                   className={`text-xs font-semibold px-2 py-1 rounded ${
@@ -721,6 +784,36 @@ const TaskView = () => {
                               </div>
                             </div>
                             <div className="p-6">
+                              {s?.evaluation?.quiz_metrics ? (
+                                <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+                                  <div className="bg-[#f9f8fc] dark:bg-[#140f23] p-4 rounded-lg border border-[#eae6f4] dark:border-[#2a2438] text-center">
+                                    <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                                      {(s.evaluation.quiz_metrics.score_percentage ?? 0).toFixed(1)}%
+                                    </div>
+                                    <div className="text-xs text-[#5d479e] dark:text-[#a094c7] mt-1">Score</div>
+                                  </div>
+                                  <div className="bg-[#f9f8fc] dark:bg-[#140f23] p-4 rounded-lg border border-[#eae6f4] dark:border-[#2a2438] text-center">
+                                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                                      {s.evaluation.quiz_metrics.correct_answers || 0}/{s.evaluation.quiz_metrics.total_questions || 0}
+                                    </div>
+                                    <div className="text-xs text-[#5d479e] dark:text-[#a094c7] mt-1">Correct</div>
+                                  </div>
+                                  <div className="bg-[#f9f8fc] dark:bg-[#140f23] p-4 rounded-lg border border-[#eae6f4] dark:border-[#2a2438] text-center">
+                                    <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                                      {s.evaluation.quiz_metrics.earned_points || 0}/{s.evaluation.quiz_metrics.total_points || 0}
+                                    </div>
+                                    <div className="text-xs text-[#5d479e] dark:text-[#a094c7] mt-1">Points</div>
+                                  </div>
+                                  <div className="bg-[#f9f8fc] dark:bg-[#140f23] p-4 rounded-lg border border-[#eae6f4] dark:border-[#2a2438] text-center">
+                                    <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                                      {Array.isArray(s.evaluation.quiz_metrics.malpractice_events)
+                                        ? s.evaluation.quiz_metrics.malpractice_events.length
+                                        : 0}
+                                    </div>
+                                    <div className="text-xs text-[#5d479e] dark:text-[#a094c7] mt-1">Violations</div>
+                                  </div>
+                                </div>
+                              ) : null}
                               <div className="mb-6">
                                 <h5 className="text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-2 tracking-widest">
                                   Submitted Text
@@ -748,6 +841,12 @@ const TaskView = () => {
                                       </button>
                                     ))}
                                   </div>
+                                </div>
+                              ) : null}
+
+                              {s.feedback ? (
+                                <div className="bg-[#f9f8fc] dark:bg-[#140f23] p-4 rounded-lg text-sm leading-relaxed border border-[#eae6f4] dark:border-[#2a2438] whitespace-pre-wrap">
+                                  {s.feedback}
                                 </div>
                               ) : null}
 

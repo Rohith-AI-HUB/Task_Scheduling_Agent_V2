@@ -18,12 +18,33 @@ const QuizAttempt = () => {
   const startTimeRef = useRef(null);
   const timerRef = useRef(null);
   const malpracticeCountRef = useRef(0);
-  const hasStartedRef = useRef(false);
+  const malpracticeEventsRef = useRef([]);
+  const autoSubmitTriggeredRef = useRef(false);
+  const startedTaskIdRef = useRef(null);
 
   // Load quiz and start attempt
   useEffect(() => {
-    if (hasStartedRef.current) return;
-    hasStartedRef.current = true;
+    if (startedTaskIdRef.current === taskId) return;
+    startedTaskIdRef.current = taskId;
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    malpracticeCountRef.current = 0;
+    malpracticeEventsRef.current = [];
+    autoSubmitTriggeredRef.current = false;
+    startTimeRef.current = null;
+
+    setLoading(true);
+    setError('');
+    setQuizData(null);
+    setAnswers([]);
+    setTimeRemaining(0);
+    setIsFullscreen(false);
+    setMalpracticeEvents([]);
+    setIsSubmitting(false);
 
     const startQuiz = async () => {
       try {
@@ -71,7 +92,11 @@ const QuizAttempt = () => {
     timerRef.current = setInterval(() => {
       setTimeRemaining((prev) => {
         if (prev <= 1) {
-          handleAutoSubmit('Time expired');
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
+          submitQuiz({ mode: 'time' });
           return 0;
         }
         return prev - 1;
@@ -189,12 +214,15 @@ const QuizAttempt = () => {
       details: details
     };
 
-    setMalpracticeEvents((prev) => [...prev, event]);
+    const next = [...(malpracticeEventsRef.current || []), event];
+    malpracticeEventsRef.current = next;
+    setMalpracticeEvents(next);
     malpracticeCountRef.current += 1;
 
     // Auto-submit after 3 violations
-    if (malpracticeCountRef.current >= 3) {
-      handleAutoSubmit('Multiple malpractice violations detected');
+    if (malpracticeCountRef.current >= 3 && !autoSubmitTriggeredRef.current) {
+      autoSubmitTriggeredRef.current = true;
+      submitQuiz({ mode: 'malpractice' });
     }
   };
 
@@ -204,14 +232,7 @@ const QuizAttempt = () => {
     setAnswers(newAnswers);
   };
 
-  const handleAutoSubmit = async (reason) => {
-    if (isSubmitting) return;
-
-    recordMalpractice('other', reason);
-    await submitQuiz(true);
-  };
-
-  const submitQuiz = async (isAutoSubmit = false) => {
+  const submitQuiz = async ({ mode } = {}) => {
     if (isSubmitting) return;
     setIsSubmitting(true);
 
@@ -221,18 +242,20 @@ const QuizAttempt = () => {
         task_id: taskId,
         answers,
         time_taken_seconds: timeTaken,
-        malpractice_events: malpracticeEvents,
+        malpractice_events: malpracticeEventsRef.current || [],
       });
 
       exitFullscreen();
 
       // Navigate to results
-      alert(
-        isAutoSubmit
-          ? 'Quiz auto-submitted due to violations. You have been locked out.'
-          : 'Quiz submitted successfully!'
-      );
-      navigate(`/tasks/${taskId}`);
+      if (mode === 'malpractice') {
+        alert('Quiz auto-submitted due to violations. You have been locked out.');
+      } else if (mode === 'time') {
+        alert('Time expired. Quiz submitted.');
+      } else {
+        alert('Quiz submitted successfully!');
+      }
+      navigate(`/task/${taskId}`, { replace: true });
     } catch (err) {
       console.error('Error submitting quiz:', err);
       alert('Failed to submit quiz: ' + (err.response?.data?.detail || 'Unknown error'));
@@ -247,7 +270,16 @@ const QuizAttempt = () => {
         return;
       }
     }
-    submitQuiz(false);
+    submitQuiz({ mode: 'manual' });
+  };
+
+  const goBack = () => {
+    const idx = window.history?.state?.idx;
+    if (typeof idx === 'number' && idx > 0) {
+      navigate(-1);
+      return;
+    }
+    navigate('/student/dashboard');
   };
 
   const formatTime = (seconds) => {
@@ -274,8 +306,9 @@ const QuizAttempt = () => {
           <h2 className="text-xl font-bold text-red-600 mb-4">Error</h2>
           <p className="text-gray-700 mb-4">{error}</p>
           <button
-            onClick={() => navigate(-1)}
+            onClick={goBack}
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            type="button"
           >
             Go Back
           </button>
@@ -310,7 +343,7 @@ const QuizAttempt = () => {
         {malpracticeEvents.length > 0 && (
           <div className="mt-3 bg-red-900 border border-red-700 rounded p-2">
             <p className="text-sm font-semibold">
-              ⚠️ Warning: {malpracticeEvents.length} violation(s) detected
+              ⚠ Warning: {malpracticeEvents.length} violation(s) detected
             </p>
             <p className="text-xs">3 violations will result in automatic submission and lockout</p>
           </div>
@@ -367,7 +400,7 @@ const QuizAttempt = () => {
       {/* Anti-exit warning */}
       {!isFullscreen && quizData.enable_fullscreen && (
         <div className="fixed top-0 left-0 right-0 bg-red-600 text-white text-center py-2 z-50">
-          ⚠️ Please return to fullscreen mode or your quiz will be auto-submitted
+          ⚠ Please return to fullscreen mode or your quiz will be auto-submitted
         </div>
       )}
     </div>

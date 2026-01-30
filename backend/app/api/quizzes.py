@@ -1,11 +1,15 @@
 from datetime import datetime
+import io
+import logging
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pymongo import ReturnDocument
 
 from app.config import settings
 from app.database.collections import get_collection
+
+logger = logging.getLogger(__name__)
 from app.models.submission import (
     MalpracticeEvent,
     QuizAnswer,
@@ -20,6 +24,95 @@ from app.services.groq_service import GroqServiceError, RateLimitExceeded, groq_
 from app.utils.dependencies import get_current_student, get_current_teacher
 
 router = APIRouter()
+
+
+async def _extract_text_from_file(file: UploadFile) -> str:
+    """
+    Extract text from uploaded file (PDF, DOCX, PPTX, TXT).
+
+    Args:
+        file: Uploaded file
+
+    Returns:
+        Extracted text content
+
+    Raises:
+        HTTPException: If file type is unsupported or extraction fails
+    """
+    content = await file.read()
+
+    try:
+        # Text files
+        if file.content_type == 'text/plain':
+            return content.decode('utf-8')
+
+        # PDF files
+        elif file.content_type == 'application/pdf':
+            try:
+                from pypdf import PdfReader
+                pdf_file = io.BytesIO(content)
+                reader = PdfReader(pdf_file)
+                text_parts = []
+                for page in reader.pages:
+                    extracted = page.extract_text()
+                    if extracted:
+                        text_parts.append(extracted)
+                return '\n'.join(text_parts)
+            except ImportError:
+                raise HTTPException(
+                    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                    detail="PDF processing library not installed. Please install pypdf."
+                )
+
+        # DOCX files
+        elif file.content_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+            try:
+                from docx import Document
+                docx_file = io.BytesIO(content)
+                doc = Document(docx_file)
+                text_parts = []
+                for paragraph in doc.paragraphs:
+                    if paragraph.text.strip():
+                        text_parts.append(paragraph.text)
+                return '\n'.join(text_parts)
+            except ImportError:
+                raise HTTPException(
+                    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                    detail="DOCX processing library not installed. Please install python-docx."
+                )
+
+        # PPTX files
+        elif file.content_type == 'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+            try:
+                from pptx import Presentation
+                pptx_file = io.BytesIO(content)
+                prs = Presentation(pptx_file)
+                text_parts = []
+                for slide in prs.slides:
+                    for shape in slide.shapes:
+                        if hasattr(shape, "text") and shape.text.strip():
+                            text_parts.append(shape.text)
+                return '\n'.join(text_parts)
+            except ImportError:
+                raise HTTPException(
+                    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                    detail="PPTX processing library not installed. Please install python-pptx."
+                )
+
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported file type: {file.content_type}"
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error extracting text from file: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to extract text from file: {str(e)}"
+        )
 
 
 async def _find_task_or_404(task_oid: ObjectId) -> dict:
@@ -81,6 +174,61 @@ def _serialize_submission(doc: dict) -> SubmissionResponse:
         attachments=attachments,
         evaluation=SubmissionEvaluation.model_validate(doc.get("evaluation")) if doc.get("evaluation") else None,
     )
+
+
+@router.post("/extract-text", response_model=dict)
+async def extract_text_from_document(
+    file: UploadFile = File(...),
+    current_teacher: dict = Depends(get_current_teacher),
+):
+    """
+    Extract text content from uploaded document (PDF, DOCX, PPTX, TXT).
+    Teachers only.
+
+    Returns:
+        dict: {"text": str, "filename": str, "size": int}
+    """
+    # Validate file size (max 25MB)
+    max_size = 25 * 1024 * 1024
+    file_size = 0
+
+    # Read file to check size
+    content = await file.read()
+    file_size = len(content)
+
+    if file_size > max_size:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File too large. Maximum size is 25MB, got {file_size / (1024 * 1024):.2f}MB"
+        )
+
+    # Reset file position
+    await file.seek(0)
+
+    # Extract text
+    try:
+        extracted_text = await _extract_text_from_file(file)
+
+        if not extracted_text or not extracted_text.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No text content found in the file"
+            )
+
+        return {
+            "text": extracted_text,
+            "filename": file.filename,
+            "size": file_size
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in extract_text_from_document: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process file: {str(e)}"
+        )
 
 
 @router.post("/generate", response_model=list[QuizQuestion])
@@ -331,7 +479,7 @@ async def submit_quiz(
 
     # Check for malpractice
     malpractice_detected = len(request.malpractice_events) > 0
-    locked_out = malpractice_detected  # Lock out if any malpractice
+    locked_out = len(request.malpractice_events) >= 3
 
     # Create quiz metrics
     now = datetime.utcnow()
@@ -360,11 +508,12 @@ async def submit_quiz(
     feedback_parts.append(f"Points Earned: {earned_points}/{total_points}")
 
     if malpractice_detected:
-        feedback_parts.append("\n⚠️ MALPRACTICE DETECTED:")
+        feedback_parts.append("\n[WARNING] MALPRACTICE DETECTED:")
         feedback_parts.append(f"Total violations: {len(request.malpractice_events)}")
         for event in request.malpractice_events[:5]:  # Show first 5
             feedback_parts.append(f"  - {event.event_type}: {event.details or 'N/A'}")
-        feedback_parts.append("\n❌ You have been locked out of this quiz.")
+        if locked_out:
+            feedback_parts.append("\n[LOCKED] You have been locked out of this quiz.")
         feedback_parts.append("Teacher has been notified.")
 
     # Update submission

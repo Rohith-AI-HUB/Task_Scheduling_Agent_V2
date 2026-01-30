@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     mongodb_server_selection_timeout_ms: int = Field(
         default=5000, alias="MONGODB_SERVER_SELECTION_TIMEOUT_MS"
     )
+    mongodb_required: bool = Field(default=True, alias="MONGODB_REQUIRED")
+    mongodb_skip_indexes: bool = Field(default=False, alias="MONGODB_SKIP_INDEXES")
 
     # Application Settings
     app_name: str = Field(default="Task Scheduling Agent V2", alias="APP_NAME")

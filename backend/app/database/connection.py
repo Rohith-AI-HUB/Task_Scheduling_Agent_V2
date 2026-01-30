@@ -27,14 +27,20 @@ async def connect_to_mongo() -> None:
     if _client is not None:
         return
 
-    _client = AsyncIOMotorClient(
+    client = AsyncIOMotorClient(
         settings.mongodb_url,
         serverSelectionTimeoutMS=settings.mongodb_server_selection_timeout_ms,
         connectTimeoutMS=settings.mongodb_server_selection_timeout_ms,
         socketTimeoutMS=settings.mongodb_server_selection_timeout_ms,
         uuidRepresentation="standard",
     )
-    await _client.admin.command("ping")
+    try:
+        await client.admin.command("ping")
+    except Exception:
+        client.close()
+        raise
+
+    _client = client
 
 
 async def close_mongo_connection() -> None:

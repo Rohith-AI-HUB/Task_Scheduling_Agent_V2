@@ -296,19 +296,19 @@ class GroqService:
         if settings.groq_api_key:
             try:
                 self.client = Groq(api_key=settings.groq_api_key)
-                logger.info("✅ Groq client initialized successfully")
+                logger.info("[OK] Groq client initialized successfully")
             except Exception as e:
-                logger.error(f"❌ Failed to initialize Groq client: {e}")
+                logger.error(f"[ERROR] Failed to initialize Groq client: {e}")
         else:
-            logger.warning("⚠️ Groq API key not configured - AI features will use fallbacks")
+            logger.warning("[WARNING] Groq API key not configured - AI features will use fallbacks")
 
         # Initialize Groq grading client if API key is available
         if settings.groq_grading_api_key:
             try:
                 self.grading_client = Groq(api_key=settings.groq_grading_api_key)
-                logger.info("✅ Groq grading client initialized successfully")
+                logger.info("[OK] Groq grading client initialized successfully")
             except Exception as e:
-                logger.error(f"❌ Failed to initialize Groq grading client: {e}")
+                logger.error(f"[ERROR] Failed to initialize Groq grading client: {e}")
 
     def is_available(self) -> bool:
         """Check if Groq service is available"""
@@ -462,6 +462,147 @@ class GroqService:
             logger.error(f"Unexpected error in Groq call: {e}")
             return fallback
 
+    async def chat_response(
+        self,
+        user_uid: str,
+        message: str,
+        intent: str,
+        context: Dict[str, Any],
+        role: str = "student",
+        history: List[Dict] = None
+    ) -> str:
+        """
+        Generate a chat response using Groq AI.
+
+        Args:
+            user_uid: User's unique identifier
+            message: User's message
+            intent: Classified intent (task_info, submission_status, etc.)
+            context: Relevant context data (tasks, submissions, schedule, workload)
+            role: User's role (student/teacher)
+            history: Recent conversation history
+
+        Returns:
+            AI-generated response string
+        """
+        history = history or []
+
+        # Build system prompt based on role
+        if role == "teacher":
+            system_prompt = """You are a helpful AI assistant for teachers using a task scheduling and classroom management system.
+
+Your role:
+- Help teachers manage their classrooms, assignments, and student submissions
+- Provide insights about pending work, upcoming deadlines, and student progress
+- Answer questions about tasks, submissions, and scheduling
+- Be concise, professional, and actionable
+
+When answering:
+- Reference specific tasks, subjects, and deadlines from the context provided
+- Suggest next actions when appropriate
+- Keep responses brief (2-3 sentences typically)
+- If you don't have enough context, ask clarifying questions"""
+        else:
+            system_prompt = """You are a helpful AI assistant for students using a task scheduling system.
+
+Your role:
+- Help students manage their assignments and deadlines
+- Provide study scheduling advice and prioritization guidance
+- Answer questions about tasks, submissions, and grades
+- Be encouraging, clear, and concise
+
+When answering:
+- Reference specific tasks and deadlines from the context provided
+- Suggest actionable next steps when relevant
+- Keep responses brief (2-3 sentences typically)
+- If you don't have enough context, ask clarifying questions"""
+
+        # Build context summary
+        context_summary = self._build_context_summary(context, role)
+
+        # Build conversation history
+        history_text = ""
+        if history:
+            history_text = "\n\nRecent conversation:\n"
+            for msg in history[-5:]:  # Last 5 messages
+                history_text += f"{msg['role']}: {msg['content']}\n"
+
+        # Build the prompt
+        prompt = f"""Context about the user:
+{context_summary}
+{history_text}
+
+User's question: {message}
+
+Provide a helpful, concise response based on the context above."""
+
+        # Call Groq API
+        return await self.safe_call(
+            feature="chat",
+            user_uid=user_uid,
+            role=role,
+            prompt=prompt,
+            system_prompt=system_prompt,
+            fallback="I'm having trouble processing your request right now. Please try again.",
+            use_cache=False,  # Don't cache chat responses
+            max_tokens=500,
+            temperature=0.7
+        )
+
+    def _build_context_summary(self, context: Dict[str, Any], role: str) -> str:
+        """Build a text summary of the context for the LLM"""
+        summary_parts = []
+
+        # Tasks
+        if "tasks" in context and context["tasks"]:
+            tasks = context["tasks"][:10]  # Limit to 10 tasks
+            if role == "teacher":
+                summary_parts.append(f"Teacher's classroom tasks ({len(tasks)}):")
+            else:
+                summary_parts.append(f"Student's upcoming tasks ({len(tasks)}):")
+            for task in tasks:
+                summary_parts.append(f"  - {task.get('title', 'Untitled')} ({task.get('subject', 'Subject')}): due {task.get('deadline', 'No deadline')}, {task.get('points', 0)} points")
+
+        # Submissions
+        if "submissions" in context and context["submissions"]:
+            submissions = context["submissions"][:5]  # Limit to 5
+            if role == "teacher":
+                summary_parts.append(f"\nRecent submissions ({len(submissions)}):")
+                for sub in submissions:
+                    status = sub.get('status', 'pending')
+                    summary_parts.append(f"  - {sub.get('task_title', 'Task')}: {status}")
+            else:
+                summary_parts.append(f"\nRecent submissions ({len(submissions)}):")
+                for sub in submissions:
+                    score = sub.get('score')
+                    summary_parts.append(f"  - {sub.get('task_title', 'Task')}: {'graded' if score is not None else 'pending'}" + (f" (score: {score})" if score is not None else ""))
+
+        # Workload
+        if "workload" in context:
+            workload = context["workload"]
+            if role == "teacher":
+                ungraded = workload.get('ungraded_submissions', 0)
+                classrooms = workload.get('active_classrooms', 0)
+                summary_parts.append(f"\nWorkload: {ungraded} ungraded submissions across {classrooms} classrooms")
+            else:
+                pending = workload.get('pending', 0)
+                overdue = workload.get('overdue', 0)
+                due_soon = workload.get('due_soon', 0)
+                summary_parts.append(f"\nWorkload: {pending} pending tasks, {overdue} overdue, {due_soon} due soon")
+
+        # Schedule
+        if "schedule" in context and context["schedule"]:
+            schedule = context["schedule"][:3]  # Top 3 priorities
+            summary_parts.append(f"\nPriority tasks:")
+            for item in schedule:
+                band = item.get('band', 'normal')
+                summary_parts.append(f"  - {item.get('title', 'Task')}: {band} priority")
+
+        if not summary_parts:
+            return "No specific context available."
+
+        return "\n".join(summary_parts)
+
     # ========================================
     # Feature-Specific Methods
     # ========================================
@@ -487,7 +628,7 @@ class GroqService:
         # Format test results
         test_results_formatted = ""
         for i, result in enumerate(test_results[:5]):  # Limit to first 5
-            status = "✓ PASSED" if result.get("passed") else "✗ FAILED"
+            status = "[PASSED]" if result.get("passed") else "[FAILED]"
             test_results_formatted += f"\nTest {i+1}: {status}"
             if not result.get("passed"):
                 test_results_formatted += f"\n  Input: {result.get('input', 'N/A')[:50]}"
@@ -882,18 +1023,59 @@ Always respond with valid JSON. Be fair, thorough, and constructive."""
                 "explanation": "Brief explanation of correct answer"
             }
         """
-        # Limit content size for API call
         content_preview = document_content[:8000] if len(document_content) > 8000 else document_content
+        target_count = max(5, min(50, num_questions))
 
-        # Ensure num_questions is within bounds
-        num_questions = max(5, min(50, num_questions))
+        system_prompt = """You are an expert educational assessment designer.
+Create high-quality multiple-choice questions that:
+- Test comprehension and application, not just recall
+- Have clear, unambiguous correct answers
+- Include plausible distractors
+- Are appropriately challenging
+Return ONLY a valid JSON array. No markdown, no prose."""
 
-        prompt = f"""Generate {num_questions} multiple-choice questions from the following educational content.
+        def clean_json_array(text: str) -> str:
+            t = (text or "").strip()
+            if t.startswith("```json"):
+                t = t[7:]
+            if t.startswith("```"):
+                t = t[3:]
+            if t.endswith("```"):
+                t = t[:-3]
+            t = t.strip()
+            start = t.find("[")
+            end = t.rfind("]")
+            if start != -1 and end != -1 and end > start:
+                return t[start : end + 1].strip()
+            return t
+
+        def is_valid_question(q: Any) -> bool:
+            return (
+                isinstance(q, dict)
+                and isinstance(q.get("question"), str)
+                and isinstance(q.get("options"), list)
+                and len(q.get("options")) == 4
+                and all(isinstance(opt, str) for opt in q.get("options"))
+                and isinstance(q.get("correct_answer"), int)
+                and 0 <= q.get("correct_answer") <= 3
+            )
+
+        async def run_batch(batch_size: int, avoid: list[str]) -> list[dict]:
+            avoid_block = ""
+            if avoid:
+                avoid_trimmed = [a.strip() for a in avoid if isinstance(a, str) and a.strip()]
+                avoid_trimmed = avoid_trimmed[-30:]
+                if avoid_trimmed:
+                    avoid_block = "\n\nDo NOT repeat or paraphrase these questions:\n" + "\n".join(
+                        f"- {q}" for q in avoid_trimmed
+                    )
+
+            prompt = f"""Generate {batch_size} multiple-choice questions from the following educational content.
 
 TOPIC: {topic}
 
 SOURCE MATERIAL:
-"{content_preview}"
+\"{content_preview}\"
 
 Requirements:
 1. Each question must have EXACTLY 4 answer choices (A, B, C, D)
@@ -902,107 +1084,114 @@ Requirements:
 4. Vary difficulty levels (easy, medium, hard)
 5. Make incorrect options plausible but clearly wrong
 6. Cover different aspects of the topic
+7. All questions must be unique (no rephrases)
+8. Return ONLY a JSON array of EXACTLY {batch_size} objects (no extra keys, no markdown){avoid_block}
 
-Respond in this EXACT JSON format (array of {num_questions} questions):
+JSON schema (array):
 [
   {{
-    "question": "What is the primary function of X?",
-    "options": [
-      "Option A text",
-      "Option B text",
-      "Option C text",
-      "Option D text"
-    ],
-    "correct_answer": 2,
-    "explanation": "Brief explanation why option C is correct",
+    "question": "…",
+    "options": ["…", "…", "…", "…"],
+    "correct_answer": 0,
+    "explanation": "…",
     "difficulty": "easy|medium|hard"
   }}
-]
-
-Ensure all {num_questions} questions are unique and relevant to the topic."""
-
-        system_prompt = """You are an expert educational assessment designer.
-Create high-quality multiple-choice questions that:
-- Test comprehension and application, not just recall
-- Have clear, unambiguous correct answers
-- Include plausible distractors
-- Are appropriately challenging
-Always output valid JSON array only."""
-
-        fallback = []
-
-        try:
-            client = self.grading_client or self.client
-            if not client:
-                raise GroqServiceError("Groq client not initialized")
+]"""
 
             role = "teacher"
-
             if not self.rate_limiter.check_limit(user_uid, "test_generation"):
                 raise RateLimitExceeded("Rate limit exceeded for quiz generation. Please try again later.")
-
             if not self.role_quota_limiter.check_limit(role):
                 raise RateLimitExceeded("Global Groq quota exceeded for your role. Please try again later.")
 
-            cache_key = None
-            if settings.groq_enable_caching:
-                cache_key = self._generate_cache_key(
-                    "test_generation",
-                    {"document_content": content_preview, "topic": topic, "num_questions": num_questions},
-                )
-                cached_response = self.cache.get(cache_key)
-                if cached_response:
-                    response = cached_response
-                else:
-                    response = await self._call_groq(
-                        prompt=prompt,
-                        system_prompt=system_prompt,
-                        max_tokens=3000,
-                        temperature=0.6,
-                        client=client,
-                    )
-                    self.cache.set(cache_key, response, 7200)
-            else:
-                response = await self._call_groq(
-                    prompt=prompt,
-                    system_prompt=system_prompt,
-                    max_tokens=3000,
-                    temperature=0.6,
-                    client=client,
-                )
-
+            response = await self._call_groq(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                max_tokens=3000,
+                temperature=0.4,
+                client=client,
+            )
             self.rate_limiter.record_usage(user_uid, "test_generation")
             self.role_quota_limiter.record_usage(role)
 
-            # Clean up response
-            response = response.strip()
-            if response.startswith("```json"):
-                response = response[7:]
-            if response.endswith("```"):
-                response = response[:-3]
-            response = response.strip()
+            cleaned = clean_json_array(response)
+            try:
+                data = json.loads(cleaned)
+            except json.JSONDecodeError:
+                response2 = await self._call_groq(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    max_tokens=3000,
+                    temperature=0.2,
+                    client=client,
+                )
+                self.rate_limiter.record_usage(user_uid, "test_generation")
+                self.role_quota_limiter.record_usage(role)
+                cleaned2 = clean_json_array(response2)
+                data = json.loads(cleaned2)
 
-            questions = json.loads(response)
+            if not isinstance(data, list):
+                return []
 
-            # Validate structure
-            if not isinstance(questions, list):
-                logger.error("Quiz questions response is not a list")
-                return fallback
+            out: list[dict] = []
+            for q in data:
+                if is_valid_question(q):
+                    out.append(q)
+            return out[:batch_size]
 
-            # Validate each question
-            valid_questions = []
-            for q in questions:
-                if (isinstance(q, dict) and
-                    "question" in q and
-                    "options" in q and
-                    "correct_answer" in q and
-                    isinstance(q["options"], list) and
-                    len(q["options"]) == 4 and
-                    isinstance(q["correct_answer"], int) and
-                    0 <= q["correct_answer"] <= 3):
-                    valid_questions.append(q)
+        client = self.grading_client or self.client
+        if not client:
+            raise GroqServiceError("Groq client not initialized")
 
-            return valid_questions[:num_questions]  # Ensure we don't return more than requested
+        cache_key = None
+        if settings.groq_enable_caching:
+            cache_key = self._generate_cache_key(
+                "test_generation",
+                {"document_content": content_preview, "topic": topic, "num_questions": target_count},
+            )
+            cached = self.cache.get(cache_key)
+            if cached:
+                try:
+                    cached_questions = json.loads(cached)
+                    if isinstance(cached_questions, list):
+                        valid_cached = [q for q in cached_questions if is_valid_question(q)]
+                        if len(valid_cached) >= target_count:
+                            return valid_cached[:target_count]
+                except Exception:
+                    self.cache.delete(cache_key)
+
+        try:
+            batch_size = 10 if target_count > 15 else target_count
+            unique_questions: list[dict] = []
+            seen = set()
+            attempts = 0
+
+            while len(unique_questions) < target_count and attempts < 30:
+                attempts += 1
+                remaining = target_count - len(unique_questions)
+                request_size = min(12, max(5, min(batch_size, remaining) + 3))
+                avoid = [q.get("question", "") for q in unique_questions if isinstance(q, dict)]
+                new_questions = await run_batch(request_size, avoid)
+                if not new_questions:
+                    continue
+                for q in new_questions:
+                    text = str(q.get("question", "")).strip().lower()
+                    if not text or text in seen:
+                        continue
+                    seen.add(text)
+                    unique_questions.append(q)
+                    if len(unique_questions) >= target_count:
+                        break
+
+            result = unique_questions[:target_count]
+            if len(result) < target_count:
+                raise GroqServiceError(
+                    f"AI could only generate {len(result)} unique questions out of {target_count}. Try again or reduce question count."
+                )
+
+            if cache_key:
+                self.cache.set(cache_key, json.dumps(result), 7200)
+            return result
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to decode quiz questions JSON: {e}")

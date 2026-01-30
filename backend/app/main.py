@@ -1,4 +1,6 @@
 from contextlib import asynccontextmanager
+import logging
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +12,8 @@ from app.config import settings
 from app.database.connection import close_mongo_connection, connect_to_mongo, ensure_mongo_indexes
 from app.utils.firebase_verify import initialize_firebase
 
+logger = logging.getLogger(__name__)
+
 
 def _parse_origins(value: str) -> list[str]:
     return [origin.strip() for origin in value.split(",") if origin.strip()]
@@ -20,8 +24,17 @@ async def lifespan(app: FastAPI):
     # Initialize Firebase Admin SDK
     initialize_firebase()
     # Connect to MongoDB
-    await connect_to_mongo()
-    await ensure_mongo_indexes()
+    mongo_required = settings.mongodb_required
+    if os.getenv("MONGODB_REQUIRED") is None and settings.debug:
+        mongo_required = False
+    try:
+        await connect_to_mongo()
+        if not settings.mongodb_skip_indexes:
+            await ensure_mongo_indexes()
+    except Exception as exc:
+        if mongo_required:
+            raise
+        logger.error("MongoDB initialization failed: %s", exc)
     yield
     # Cleanup
     await close_mongo_connection()

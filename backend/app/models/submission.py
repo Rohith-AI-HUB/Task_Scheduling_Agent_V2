@@ -135,6 +135,6 @@ class QuizSubmitRequest(BaseModel):
 
 
 class QuizGenerateRequest(BaseModel):
-    document_content: str = Field(min_length=1, max_length=50000)
+    document_content: str = Field(min_length=1)
     topic: str = Field(min_length=1, max_length=200)
     num_questions: int = Field(ge=5, le=50, default=10)

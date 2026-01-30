@@ -8,6 +8,21 @@ const QuizGenerator = ({ onQuestionsGenerated, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const getErrorMessage = (err, fallback) => {
+    if (typeof err?.userMessage === 'string' && err.userMessage) return err.userMessage;
+    const detail = err?.response?.data?.detail;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail) && detail.length > 0) {
+      const first = detail[0];
+      if (typeof first?.msg === 'string') return first.msg;
+      return JSON.stringify(first);
+    }
+    if (detail && typeof detail === 'object') return JSON.stringify(detail);
+    if (typeof err?.response?.data?.message === 'string') return err.response.data.message;
+    if (typeof err?.message === 'string' && err.message) return err.message;
+    return fallback;
+  };
+
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -25,16 +40,45 @@ const QuizGenerator = ({ onQuestionsGenerated, onClose }) => {
       return;
     }
 
-    // For now, we'll just read text files directly
-    // For PDF/DOCX/PPTX, the teacher would need to copy-paste or we'd need a file upload endpoint
-    if (file.type === 'text/plain') {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setDocumentText(e.target.result);
-      };
-      reader.readAsText(file);
-    } else {
-      setError('For PDF/DOCX/PPTX files, please copy and paste the text content for now');
+    setError('');
+    setLoading(true);
+
+    try {
+      // For text files, read directly
+      if (file.type === 'text/plain') {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setDocumentText(e.target.result);
+          setLoading(false);
+        };
+        reader.onerror = () => {
+          setError('Failed to read text file');
+          setLoading(false);
+        };
+        reader.readAsText(file);
+      } else {
+        // For PDF/DOCX/PPTX, upload to backend for text extraction
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await api.post('/quizzes/extract-text', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+
+        setDocumentText(response.data.text);
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error('Error processing file:', err);
+      setError(
+        getErrorMessage(
+          err,
+          'Failed to process file. Please try again or copy-paste the text manually.'
+        )
+      );
+      setLoading(false);
     }
   };
 
@@ -53,22 +97,21 @@ const QuizGenerator = ({ onQuestionsGenerated, onClose }) => {
     setError('');
 
     try {
-      const response = await api.post('/quizzes/generate', {
-        document_content: documentText,
-        topic,
-        num_questions: numQuestions,
-      });
+      const response = await api.post(
+        '/quizzes/generate',
+        {
+          document_content: documentText,
+          topic,
+          num_questions: numQuestions,
+        },
+        { timeout: 180000 }
+      );
 
       onQuestionsGenerated(response.data);
       onClose();
     } catch (err) {
       console.error('Error generating questions:', err);
-      setError(
-        err?.response?.data?.detail ||
-          err?.response?.data?.message ||
-          err?.message ||
-          'Failed to generate questions'
-      );
+      setError(getErrorMessage(err, 'Failed to generate questions'));
     } finally {
       setLoading(false);
     }
@@ -76,7 +119,19 @@ const QuizGenerator = ({ onQuestionsGenerated, onClose }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto relative">
+        {loading ? (
+          <div className="absolute inset-0 z-10 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 px-6">
+            <svg className="animate-spin h-12 w-12 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <div className="text-center">
+              <div className="text-base font-semibold text-gray-900">Generating {numQuestions} questions…</div>
+              <div className="text-sm text-gray-600">This can take up to a couple of minutes for large sets.</div>
+            </div>
+          </div>
+        ) : null}
         {/* Header */}
         <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white p-6 rounded-t-lg">
           <h2 className="text-2xl font-bold">Generate Quiz Questions with AI</h2>
@@ -157,7 +212,7 @@ const QuizGenerator = ({ onQuestionsGenerated, onClose }) => {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Characters: {documentText.length} / 50,000
+              Characters: {documentText.length}
             </p>
           </div>
 

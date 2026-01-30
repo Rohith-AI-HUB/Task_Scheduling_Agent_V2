@@ -86,7 +86,7 @@ def _build_document_feedback(document_metrics: dict[str, Any]) -> str:
         if improvements and isinstance(improvements, list):
             sections.append("\nKey Improvements:")
             for imp in improvements:
-                sections.append(f"• {imp}")
+                sections.append(f"- {imp}")
         
         sections.append("")
 
@@ -105,7 +105,7 @@ def _build_document_feedback(document_metrics: dict[str, Any]) -> str:
 
     # Word count
     if word_count > 0:
-        status = "✓" if meets_min_words else "✗"
+        status = "[OK]" if meets_min_words else "[X]"
         sections.append(f"Word Count: {word_count} {status}")
 
     # Keywords
@@ -141,7 +141,7 @@ def _build_document_feedback(document_metrics: dict[str, Any]) -> str:
 
     # Plagiarism
     if plagiarism_detected:
-        sections.append(f"\n⚠️ PLAGIARISM WARNING:")
+        sections.append(f"\n[WARNING] PLAGIARISM WARNING:")
         sections.append(f"  - Similarity with other submissions: {max_similarity:.1f}%")
         sections.append(f"  - This submission shows significant similarity to other work.")
     elif max_similarity > 30:
@@ -220,7 +220,7 @@ def build_ai_feedback(
         recommendations.append("- Improve document structure with proper paragraphs and sections")
 
     if document_metrics.get("plagiarism_detected", False):
-        recommendations.append("- ⚠️ Rewrite your submission in your own words to avoid plagiarism")
+        recommendations.append("- [WARNING] Rewrite your submission in your own words to avoid plagiarism")
 
     if recommendations:
         sections.append("=== RECOMMENDATIONS ===")

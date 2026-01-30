@@ -121,6 +121,15 @@ const Profile = () => {
     }
   };
 
+  const goBack = () => {
+    const idx = window.history?.state?.idx;
+    if (typeof idx === 'number' && idx > 0) {
+      navigate(-1);
+      return;
+    }
+    navigate(userRole === 'teacher' ? '/teacher/dashboard' : '/student/dashboard');
+  };
+
   return (
     <div className="bg-background-light dark:bg-background-dark min-h-screen text-[#110d1c] dark:text-white font-display">
       <header className="sticky top-0 z-50 w-full border-b border-[#d5cee9] bg-background-light/80 backdrop-blur-md dark:border-white/10 dark:bg-background-dark/80">
@@ -136,7 +145,8 @@ const Profile = () => {
           </div>
           <button
             className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors"
-            onClick={() => navigate(-1)}
+            onClick={goBack}
+            type="button"
           >
             <span className="material-symbols-outlined text-lg">arrow_back</span>
             Back

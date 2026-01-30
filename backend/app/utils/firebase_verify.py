@@ -33,9 +33,9 @@ def initialize_firebase():
                 cred_json = base64.b64decode(settings.firebase_credentials_base64).decode('utf-8')
                 cred_dict = json.loads(cred_json)
                 cred = credentials.Certificate(cred_dict)
-                print("✅ Firebase credentials loaded from base64 environment variable")
+                print("[OK] Firebase credentials loaded from base64 environment variable")
             except Exception as e:
-                print(f"⚠️ Failed to load base64 credentials: {e}")
+                print(f"[WARNING] Failed to load base64 credentials: {e}")
 
         # Method 2: Try file path (development)
         if cred is None:
@@ -44,7 +44,7 @@ def initialize_firebase():
 
             if cred_path and os.path.exists(cred_path):
                 cred = credentials.Certificate(cred_path)
-                print(f"✅ Firebase credentials loaded from: {cred_path}")
+                print(f"[OK] Firebase credentials loaded from: {cred_path}")
             else:
                 # Try default locations
                 default_paths = [
@@ -56,7 +56,7 @@ def initialize_firebase():
                 for path in default_paths:
                     if os.path.exists(path):
                         cred = credentials.Certificate(path)
-                        print(f"✅ Firebase credentials loaded from: {path}")
+                        print(f"[OK] Firebase credentials loaded from: {path}")
                         break
 
         if cred is None:
@@ -66,11 +66,11 @@ def initialize_firebase():
             )
 
         _firebase_app = firebase_admin.initialize_app(cred)
-        print("✅ Firebase Admin SDK initialized successfully")
+        print("[OK] Firebase Admin SDK initialized successfully")
         return _firebase_app
 
     except Exception as e:
-        print(f"❌ Failed to initialize Firebase Admin SDK: {e}")
+        print(f"[ERROR] Failed to initialize Firebase Admin SDK: {e}")
         raise
 
 

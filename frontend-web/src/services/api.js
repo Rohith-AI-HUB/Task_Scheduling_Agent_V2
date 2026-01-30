@@ -1,10 +1,38 @@
 import axios from 'axios';
 import { auth } from '../config/firebase';
 
+const coerceErrorMessage = (value) => {
+  if (!value) return null;
+  if (typeof value === 'string') return value;
+
+  if (Array.isArray(value)) {
+    const msgs = value
+      .map((item) => (typeof item?.msg === 'string' ? item.msg : null))
+      .filter(Boolean);
+    if (msgs.length > 0) return msgs.join('; ');
+    try {
+      return JSON.stringify(value[0] ?? value);
+    } catch {
+      return 'Unknown error';
+    }
+  }
+
+  if (typeof value === 'object') {
+    if (typeof value.msg === 'string') return value.msg;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return 'Unknown error';
+    }
+  }
+
+  return null;
+};
+
 // Create axios instance with default config
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api',
-  timeout: 10000,
+  timeout: 60000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -47,11 +75,12 @@ api.interceptors.response.use(
       // Server responded with error status
       const { status, data } = error.response;
       const message =
-        data?.detail ||
-        data?.message ||
-        data?.error ||
+        coerceErrorMessage(data?.detail) ||
+        coerceErrorMessage(data?.message) ||
+        coerceErrorMessage(data?.error) ||
         (typeof data === 'string' ? data : null) ||
         'Unknown error';
+      error.userMessage = message;
 
       switch (status) {
         case 401:
@@ -73,10 +102,20 @@ api.interceptors.response.use(
       }
     } else if (error.request) {
       // Request made but no response
-      console.error('Network error - no response from server');
+      if (error.code === 'ECONNABORTED' || String(error.message || '').toLowerCase().includes('timeout')) {
+        const message = 'Request timed out. Quiz generation can take a bit longer—please try again.';
+        error.userMessage = message;
+        console.error('Request timeout:', message);
+      } else {
+        const message = 'Network error - no response from server';
+        error.userMessage = message;
+        console.error(message);
+      }
     } else {
       // Something else happened
-      console.error('Error:', error.message);
+      const message = error.message || 'Unknown error';
+      error.userMessage = message;
+      console.error('Error:', message);
     }
     return Promise.reject(error);
   }
