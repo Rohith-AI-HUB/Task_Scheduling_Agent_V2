@@ -152,15 +152,15 @@ pip install -r requirements.txt
 
 # Setup environment variables
 cp .env.example .env
-# Edit .env with your configuration:
-#   - MONGODB_URL
-#   - FIREBASE_CREDENTIALS (path to JSON file)
-#   - GROQ_API_KEY (optional)
+Edit .env with your configuration:
+  - MONGODB_URL
+  - FIREBASE_CREDENTIALS (path to JSON file)
+  - GROQ_API_KEY (optional)
 
-# Download Firebase credentials
-# 1. Go to Firebase Console > Project Settings > Service Accounts
-# 2. Generate new private key
-# 3. Save as firebase-credentials.json in backend/
+Download Firebase credentials
+1. Go to Firebase Console > Project Settings > Service Accounts
+2. Generate new private key
+3. Save as firebase-credentials.json in backend/
 
 # Run the server
 uvicorn app.main:app --reload
@@ -178,10 +178,10 @@ cd frontend-web
 # Install dependencies
 npm install
 
-# Setup environment variables
-# Create .env file with:
-#   VITE_API_BASE_URL=http://localhost:8000/api
-#   VITE_FIREBASE_CONFIG={"apiKey":"...","authDomain":"..."}
+Setup environment variables
+Create .env file with:
+VITE_API_BASE_URL=http://localhost:8000/api
+VITE_FIREBASE_CONFIG={"apiKey":"...","authDomain":"..."}
 
 # Run development server
 npm run dev
@@ -305,31 +305,320 @@ Task-focused AI chatbot with credit system:
 
 ---
 
-## 🚢 Deployment
+## 🚢 Backend Deployment on Render (Step-by-Step)
 
-### Render (Backend)
+### Prerequisites
 
-```bash
-# Automatic deployment via render.yaml
-git push origin main
-```
+Before deploying, ensure you have:
+- A GitHub account with this repository
+- A [Render](https://render.com) account (free tier works)
+- A [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) account
+- A [Firebase](https://console.firebase.google.com) project
+- A [Groq API](https://console.groq.com) key (optional, for AI features)
 
-Configuration: `backend/render.yaml`
+---
 
-### Vercel (Frontend)
+### Step 1: Set Up MongoDB Atlas
 
-```bash
-# Install Vercel CLI
-npm install -g vercel
+1. **Create a MongoDB Atlas Account**
+   - Go to [MongoDB Atlas](https://www.mongodb.com/cloud/atlas/register)
+   - Sign up for a free account
 
-# Deploy
-cd frontend-web
-vercel
-```
+2. **Create a New Cluster**
+   - Click "Build a Database"
+   - Select **M0 FREE** tier
+   - Choose a cloud provider and region (preferably close to your users)
+   - Click "Create Cluster"
 
-Configuration: `frontend-web/vercel.json`
+3. **Create Database User**
+   - Go to **Database Access** in the left sidebar
+   - Click "Add New Database User"
+   - Choose **Password** authentication
+   - Username: `taskagent` (or your choice)
+   - Password: Generate a strong password and save it
+   - Database User Privileges: **Read and write to any database**
+   - Click "Add User"
+
+4. **Configure Network Access**
+   - Go to **Network Access** in the left sidebar
+   - Click "Add IP Address"
+   - Click "Allow Access from Anywhere" (for Render deployment)
+   - This adds `0.0.0.0/0` to the whitelist
+   - Click "Confirm"
+
+5. **Get Connection String**
+   - Go to **Database** in the left sidebar
+   - Click "Connect" on your cluster
+   - Choose "Connect your application"
+   - Copy the connection string:
+     ```
+     mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority&appName=TaskScheduler
+     ```
+   - Replace `<username>` and `<password>` with your database user credentials
+   - Save this for later use
+
+---
+
+### Step 2: Set Up Firebase Authentication
+
+1. **Create Firebase Project**
+   - Go to [Firebase Console](https://console.firebase.google.com)
+   - Click "Add project"
+   - Enter project name: `task-scheduling-agent` (or your choice)
+   - Disable Google Analytics (optional)
+   - Click "Create project"
+
+2. **Enable Authentication**
+   - In your Firebase project, go to **Authentication** in the left sidebar
+   - Click "Get started"
+   - Enable **Email/Password** sign-in method
+   - Enable **Google** sign-in method (optional)
+
+3. **Get Firebase Web Config** (for frontend later)
+   - Go to **Project Settings** (gear icon) > "General"
+   - Scroll to "Your apps"
+   - Click the web icon `</>`
+   - Register app name: `task-scheduling-web`
+   - Copy the config object (you'll need this for frontend)
+
+4. **Generate Service Account Key** (for backend)
+   - In **Project Settings**, go to the "Service accounts" tab
+   - Click "Generate new private key"
+   - Click "Generate key"
+   - Save the downloaded JSON file as `firebase-credentials.json`
+
+5. **Encode Firebase Credentials for Render**
+
+   **On Windows (PowerShell):**
+   ```powershell
+   $bytes = [System.IO.File]::ReadAllBytes("firebase-credentials.json")
+   $base64 = [System.Convert]::ToBase64String($bytes)
+   $base64 | Set-Clipboard
+   ```
+
+   **On Mac/Linux:**
+   ```bash
+   base64 -w 0 firebase-credentials.json | pbcopy  # Mac
+   base64 -w 0 firebase-credentials.json | xclip -selection clipboard  # Linux
+   ```
+
+   The base64-encoded string is now in your clipboard. Save it in a text file for the next step.
+
+---
+
+### Step 3: Get Groq API Key (Optional - for AI Features)
+
+1. **Create Groq Account**
+   - Go to [Groq Console](https://console.groq.com)
+   - Sign up for a free account
+
+2. **Generate API Key**
+   - Go to "API Keys" section
+   - Click "Create API Key"
+   - Name it: `task-scheduling-agent`
+   - Copy and save the API key securely
+   - **Note**: Free tier includes 30 requests/minute and 14,400 requests/day
+
+---
+
+### Step 4: Deploy Backend to Render
+
+#### Option A: Deploy via Render Blueprint (Recommended)
+
+1. **Push to GitHub**
+   - Ensure your code is pushed to GitHub
+   ```bash
+   git add .
+   git commit -m "Prepare for Render deployment"
+   git push origin main
+   ```
+
+2. **Create New Blueprint**
+   - Go to [Render Dashboard](https://dashboard.render.com)
+   - Click "New" → "Blueprint"
+   - Click "Connect a repository"
+   - Authorize Render to access your GitHub account
+   - Select your repository: `Task_Scheduling_Agent_V2`
+
+3. **Configure Blueprint**
+   - Render will auto-detect `backend/render.yaml`
+   - Service name: `task-scheduling-agent-api`
+   - Click "Apply"
+
+4. **Set Environment Variables**
+
+   Render will prompt you to fill in these required variables:
+
+   | Variable | Value | Description |
+   |----------|-------|-------------|
+   | `MONGODB_URL` | `mongodb+srv://...` | Your MongoDB Atlas connection string from Step 1 |
+   | `FIREBASE_CREDENTIALS_BASE64` | `eyJ0eXBlIjoi...` | Base64-encoded Firebase credentials from Step 2 |
+   | `ALLOWED_ORIGINS` | `https://your-app.vercel.app` | Your frontend URL (update after frontend deployment) |
+   | `GROQ_API_KEY` | `gsk_...` | Your Groq API key from Step 3 (optional) |
+
+   **Note**: `SECRET_KEY` and `MONGODB_DB_NAME` are auto-configured in `render.yaml`
+
+5. **Deploy**
+   - Click "Apply" to start deployment
+   - Render will:
+     - Install Python dependencies
+     - Start the Gunicorn server
+     - Run health checks
+   - Wait 3-5 minutes for deployment to complete
+
+6. **Get Backend URL**
+   - Once deployed, copy your backend URL:
+     ```
+     https://task-scheduling-agent-api.onrender.com
+     ```
+   - Save this for frontend configuration
+
+---
+
+#### Option B: Deploy via Render Dashboard (Manual)
+
+1. **Create Web Service**
+   - Go to [Render Dashboard](https://dashboard.render.com)
+   - Click "New" → "Web Service"
+   - Connect your GitHub repository
+
+2. **Configure Service**
+   - **Name**: `task-scheduling-agent-api`
+   - **Region**: Choose closest to your users (e.g., Oregon USA, Frankfurt EU)
+   - **Branch**: `main`
+   - **Root Directory**: `backend`
+   - **Runtime**: `Python 3`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT`
+
+3. **Add Environment Variables**
+
+   Click "Advanced" → "Add Environment Variable" and add each:
+
+   | Key | Value |
+   |-----|-------|
+   | `PYTHON_VERSION` | `3.11.7` |
+   | `MONGODB_URL` | Your MongoDB connection string |
+   | `MONGODB_DB_NAME` | `task_scheduling_agent` |
+   | `FIREBASE_CREDENTIALS_BASE64` | Your base64-encoded Firebase credentials |
+   | `SECRET_KEY` | Generate using: `python -c "import secrets; print(secrets.token_urlsafe(64))"` |
+   | `ALLOWED_ORIGINS` | `https://your-app.vercel.app` (update later) |
+   | `DEBUG` | `False` |
+   | `GROQ_API_KEY` | Your Groq API key (optional) |
+   | `GROQ_ENABLE_ROUTING` | `true` |
+   | `GROQ_ENABLE_GUARDS` | `true` |
+   | `GROQ_ENABLE_CACHING` | `true` |
+
+4. **Create Web Service**
+   - Click "Create Web Service"
+   - Wait for deployment (3-5 minutes)
+
+---
+
+### Step 5: Verify Deployment
+
+1. **Check Health Endpoint**
+   ```bash
+   curl https://your-backend-url.onrender.com/health
+   ```
+
+   Expected response:
+   ```json
+   {"status": "ok"}
+   ```
+
+2. **Check API Documentation**
+   - Open in browser: `https://your-backend-url.onrender.com/docs`
+   - You should see the FastAPI interactive documentation (Swagger UI)
+
+3. **Check Render Logs**
+   - In Render Dashboard, go to your service
+   - Click "Logs" tab
+   - Look for:
+     ```
+     Application startup complete
+     MongoDB connected successfully
+     ```
+
+---
+
+### Step 6: Configure Auto-Deploy (Optional)
+
+1. **Enable Auto-Deploy**
+   - In Render Dashboard, go to your service
+   - Go to "Settings" tab
+   - Scroll to "Auto-Deploy"
+   - Enable "Auto-Deploy: Yes"
+   - Every push to `main` branch will trigger automatic deployment
+
+---
+
+### Step 7: Update CORS Settings
+
+1. **After Frontend Deployment**
+   - Once you deploy the frontend to Vercel (next step), you'll get a URL like:
+     ```
+     https://task-scheduling-agent.vercel.app
+     ```
+
+2. **Update ALLOWED_ORIGINS**
+   - Go to Render Dashboard → Your service → "Environment"
+   - Edit `ALLOWED_ORIGINS` variable:
+     ```
+     https://task-scheduling-agent.vercel.app,https://www.your-custom-domain.com
+     ```
+   - Save changes (service will auto-redeploy)
+
+---
+
+### Troubleshooting
+
+**Issue: Deployment fails with "Module not found"**
+- Solution: Ensure `requirements.txt` is in the `backend/` directory
+- Check Render logs for the specific missing module
+
+**Issue: "Firebase credentials not found"**
+- Solution: Verify `FIREBASE_CREDENTIALS_BASE64` has no line breaks
+- Re-encode the JSON file ensuring no newlines: `base64 -w 0 firebase-credentials.json`
+
+**Issue: "MongoDB connection timeout"**
+- Solution: Check Network Access in MongoDB Atlas
+- Ensure `0.0.0.0/0` is in the IP whitelist
+
+**Issue: "Health check failed"**
+- Solution: Check Render logs for errors
+- Verify MongoDB connection string is correct
+- Ensure `/health` endpoint returns 200 status
+
+**Issue: "CORS error when accessing from frontend"**
+- Solution: Update `ALLOWED_ORIGINS` with your frontend URL
+- Include both `http://` and `https://` if testing locally
+
+---
+
+### Next Steps
+
+After successful backend deployment:
+
+1. **Deploy Frontend to Vercel** - See [Frontend Deployment Guide](#frontend-deployment-on-vercel)
+2. **Test Authentication** - Create a teacher account and verify login
+3. **Update Documentation** - See complete [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for advanced configuration
+
+---
+
+## Frontend Deployment on Vercel
+
+**Coming soon** - Deploy the React frontend to Vercel with PWA support.
+
+See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for complete frontend deployment instructions.
+
+---
+
+## Alternative Deployment Options
 
 ### College Server (No Containers)
+
+For servers that don't allow containers:
 
 ```bash
 # Run installation script
