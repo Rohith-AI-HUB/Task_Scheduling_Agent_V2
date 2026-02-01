@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { registerWithEmail, loginWithGoogle, getAuthErrorMessage } from '../services/authService';
-import { auth } from '../config/firebase';
 import api from '../services/api';
 
 const Register = () => {
@@ -17,25 +16,11 @@ const Register = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
-  // Track if user came from login with existing Firebase auth
-  const [existingFirebaseUser, setExistingFirebaseUser] = useState(null);
 
   useEffect(() => {
     // Check if there's a message from the login page
     if (location.state?.message) {
       setInfoMessage(location.state.message);
-    }
-
-    // Check if user is already signed in with Firebase but not in backend
-    const currentUser = auth.currentUser;
-    if (currentUser) {
-      setExistingFirebaseUser(currentUser);
-      // Pre-fill form data from Firebase user
-      setFormData(prev => ({
-        ...prev,
-        fullName: currentUser.displayName || '',
-        email: currentUser.email || ''
-      }));
     }
   }, [location.state]);
 
@@ -46,36 +31,6 @@ const Register = () => {
     });
     setError('');
     setInfoMessage('');
-  };
-
-  // Handle completing registration for users who are already signed in with Firebase
-  const handleCompleteRegistration = async () => {
-    if (!formData.role) {
-      setError('Please select your role (Student or Teacher)');
-      return;
-    }
-
-    setIsLoading(true);
-    setError('');
-
-    try {
-      const idToken = await existingFirebaseUser.getIdToken();
-
-      await api.post('/auth/login', {
-        idToken,
-        uid: existingFirebaseUser.uid,
-        email: existingFirebaseUser.email,
-        name: existingFirebaseUser.displayName || formData.fullName,
-        role: formData.role
-      });
-
-      navigate('/', { replace: true });
-    } catch (err) {
-      console.error('Complete registration error:', err);
-      setError(err?.response?.data?.detail || 'Failed to complete registration');
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   const handleSubmit = async (e) => {
@@ -208,84 +163,6 @@ const Register = () => {
                   {error}
                 </div>
               )}
-
-              {/* Simplified form for existing Firebase users who need to pick a role */}
-              {existingFirebaseUser ? (
-                <div className="space-y-5">
-                  <div className="p-4 bg-gray-50 dark:bg-[#1a0f23] rounded-lg border border-[#ddcee9] dark:border-[#3a264a]">
-                    <p className="text-sm text-[#79479e] dark:text-gray-400 mb-1">Signed in as</p>
-                    <p className="font-medium text-[#150d1c] dark:text-white">{existingFirebaseUser.displayName || existingFirebaseUser.email}</p>
-                    <p className="text-sm text-[#79479e] dark:text-gray-400">{existingFirebaseUser.email}</p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="block text-[#150d1c] dark:text-gray-200 text-sm font-medium mb-1.5 ml-1">I am a</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <label
-                        className={`relative flex items-center justify-center gap-2 h-12 px-4 rounded-lg border-2 cursor-pointer transition-all ${
-                          formData.role === 'student'
-                            ? 'border-primary bg-primary/10'
-                            : 'border-[#ddcee9] dark:border-[#3a264a] bg-white dark:bg-[#1a0f23] hover:border-primary/60'
-                        } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        <input
-                          type="radio"
-                          name="role"
-                          value="student"
-                          checked={formData.role === 'student'}
-                          onChange={handleChange}
-                          disabled={isLoading}
-                          className="sr-only"
-                        />
-                        <span className={`material-symbols-outlined text-[20px] ${formData.role === 'student' ? 'text-primary' : 'text-[#79479e]/70'}`}>school</span>
-                        <span className={`font-semibold ${formData.role === 'student' ? 'text-primary' : 'text-[#150d1c] dark:text-gray-200'}`}>
-                          Student
-                        </span>
-                        {formData.role === 'student' && (
-                          <span className="material-symbols-outlined absolute right-3 text-primary text-[20px]">check_circle</span>
-                        )}
-                      </label>
-
-                      <label
-                        className={`relative flex items-center justify-center gap-2 h-12 px-4 rounded-lg border-2 cursor-pointer transition-all ${
-                          formData.role === 'teacher'
-                            ? 'border-primary bg-primary/10'
-                            : 'border-[#ddcee9] dark:border-[#3a264a] bg-white dark:bg-[#1a0f23] hover:border-primary/60'
-                        } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        <input
-                          type="radio"
-                          name="role"
-                          value="teacher"
-                          checked={formData.role === 'teacher'}
-                          onChange={handleChange}
-                          disabled={isLoading}
-                          className="sr-only"
-                        />
-                        <span className={`material-symbols-outlined text-[20px] ${formData.role === 'teacher' ? 'text-primary' : 'text-[#79479e]/70'}`}>psychology</span>
-                        <span className={`font-semibold ${formData.role === 'teacher' ? 'text-primary' : 'text-[#150d1c] dark:text-gray-200'}`}>
-                          Teacher
-                        </span>
-                        {formData.role === 'teacher' && (
-                          <span className="material-symbols-outlined absolute right-3 text-primary text-[20px]">check_circle</span>
-                        )}
-                      </label>
-                    </div>
-                  </div>
-
-                  <button
-                    className="w-full bg-primary hover:bg-primary/90 text-white font-semibold h-12 rounded-lg shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
-                    type="button"
-                    onClick={handleCompleteRegistration}
-                    disabled={isLoading}
-                  >
-                    <span>{isLoading ? 'Completing registration...' : 'Complete registration'}</span>
-                    {!isLoading && (
-                      <span className="material-symbols-outlined text-sm group-hover:translate-x-0.5 transition-transform">arrow_forward</span>
-                    )}
-                  </button>
-                </div>
-              ) : (
               <form className="space-y-5" onSubmit={handleSubmit}>
                 <div>
                   <label className="block text-[#150d1c] dark:text-gray-200 text-sm font-medium mb-1.5 ml-1">Full Name</label>
@@ -416,9 +293,6 @@ const Register = () => {
                   )}
                 </button>
               </form>
-              )}
-
-              {!existingFirebaseUser && (
               <>
               <div className="relative my-8">
                 <div className="absolute inset-0 flex items-center">
@@ -453,7 +327,6 @@ const Register = () => {
                 Sign up with Google
               </button>
               </>
-              )}
             </div>
 
             <div className="bg-gray-50 dark:bg-[#2a1b38] px-8 py-4 border-t border-[#eee6f4] dark:border-[#3a264a] text-center">

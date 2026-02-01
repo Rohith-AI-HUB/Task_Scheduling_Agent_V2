@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { signOut } from 'firebase/auth';
 import { loginWithEmail, loginWithGoogle, getAuthErrorMessage } from '../services/authService';
+import { auth } from '../config/firebase';
 import api from '../services/api';
 
 const Login = () => {
@@ -73,8 +75,11 @@ const Login = () => {
 
       // If role is required, redirect to register page to select role
       if (err?.response?.status === 400 && errorDetail.includes('Role is required')) {
+        try {
+          await signOut(auth);
+        } catch {}
         navigate('/register', {
-          state: { message: 'Please select your role to complete registration.' }
+          state: { message: 'Please select your role before signing in with Google.' }
         });
         return;
       }

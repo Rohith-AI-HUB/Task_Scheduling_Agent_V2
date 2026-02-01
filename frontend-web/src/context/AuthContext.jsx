@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import api from '../services/api';
 
@@ -54,7 +54,10 @@ export const AuthProvider = ({ children }) => {
         const role = sessionStorage.getItem('pendingRole');
         if (!role) {
           setUserRole(null);
-          setNeedsRegistration(true);
+          setNeedsRegistration(false);
+          try {
+            await signOut(auth);
+          } catch {}
           return;
         }
 
