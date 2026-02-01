@@ -29,6 +29,14 @@ const TaskView = () => {
   const [collapsedGroups, setCollapsedGroups] = useState({});
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
   const fileInputRef = useRef(null);
+  const evalPollersRef = useRef(new Map());
+  const [evaluationProgressById, setEvaluationProgressById] = useState({});
+  const [aiProcessingById, setAiProcessingById] = useState({});
+  const [manualGradeSubmission, setManualGradeSubmission] = useState(null);
+  const [manualGradeScore, setManualGradeScore] = useState('');
+  const [manualGradeFeedback, setManualGradeFeedback] = useState('');
+  const [manualGradeSaving, setManualGradeSaving] = useState(false);
+  const [manualGradeError, setManualGradeError] = useState('');
 
   const getErrorMessage = (err, fallback) => {
     const detail = err?.response?.data?.detail;
@@ -41,6 +49,110 @@ const TaskView = () => {
     if (detail && typeof detail === 'object') return JSON.stringify(detail);
     if (typeof err?.message === 'string' && err.message) return err.message;
     return fallback;
+  };
+
+  const clearEvalPoller = (submissionId) => {
+    const handle = evalPollersRef.current.get(submissionId);
+    if (handle) clearInterval(handle);
+    evalPollersRef.current.delete(submissionId);
+  };
+
+  const fetchEvaluationProgress = async (submissionId) => {
+    const response = await api.get(`/submissions/${submissionId}/evaluation/progress`);
+    setEvaluationProgressById((prev) => ({ ...prev, [submissionId]: response.data }));
+    return response.data;
+  };
+
+  const startEvalPolling = (submissionId) => {
+    if (evalPollersRef.current.has(submissionId)) return;
+    const tick = async () => {
+      try {
+        const data = await fetchEvaluationProgress(submissionId);
+        const status = String(data?.status || '').toLowerCase();
+        if (status === 'completed' || status === 'failed') {
+          clearEvalPoller(submissionId);
+          await loadSubmissions();
+        }
+      } catch (err) {
+        clearEvalPoller(submissionId);
+        setSubmissionError(getErrorMessage(err, 'Failed to load evaluation progress'));
+      }
+    };
+    tick();
+    const handle = setInterval(tick, 2000);
+    evalPollersRef.current.set(submissionId, handle);
+  };
+
+  const triggerAiGrade = async (submissionOrId) => {
+    const submissionId = typeof submissionOrId === 'string' ? submissionOrId : submissionOrId?.id;
+    if (!submissionId) return;
+    const prevStatus = String(submissionOrId?.evaluation?.status || '').toLowerCase();
+    const force = prevStatus === 'completed' || prevStatus === 'failed';
+    setAiProcessingById((prev) => ({ ...prev, [submissionId]: true }));
+    setSubmissionError('');
+    try {
+      const response = await api.post(`/submissions/${submissionId}/evaluate`, null, force ? { params: { force: true } } : undefined);
+      setSubmissions((prev) => prev.map((s) => (s.id === submissionId ? response.data : s)));
+      startEvalPolling(submissionId);
+    } catch (err) {
+      setSubmissionError(getErrorMessage(err, 'Failed to start AI grading'));
+    } finally {
+      setAiProcessingById((prev) => {
+        const next = { ...prev };
+        delete next[submissionId];
+        return next;
+      });
+    }
+  };
+
+  const openManualGrade = (submission) => {
+    setManualGradeError('');
+    setManualGradeSubmission(submission);
+    setManualGradeScore(typeof submission?.score === 'number' ? String(submission.score) : '');
+    setManualGradeFeedback(typeof submission?.feedback === 'string' ? submission.feedback : '');
+  };
+
+  const saveManualGrade = async () => {
+    if (!manualGradeSubmission?.id) return;
+    setManualGradeSaving(true);
+    setManualGradeError('');
+    try {
+      const parsedScore = manualGradeScore === '' ? null : Number(manualGradeScore);
+      const scoreValue = parsedScore === null ? null : Number.isFinite(parsedScore) ? parsedScore : null;
+      const payload = {
+        score: scoreValue,
+        feedback: manualGradeFeedback === '' ? null : manualGradeFeedback,
+      };
+      const response = await api.patch(`/submissions/${manualGradeSubmission.id}/grade`, payload);
+      setSubmissions((prev) => prev.map((s) => (s.id === manualGradeSubmission.id ? response.data : s)));
+      setManualGradeSubmission(null);
+    } catch (err) {
+      setManualGradeError(getErrorMessage(err, 'Failed to save grade'));
+    } finally {
+      setManualGradeSaving(false);
+    }
+  };
+
+  const applyAiScoreAsGrade = async (submission) => {
+    const submissionId = submission?.id;
+    const aiScore = submission?.evaluation?.ai_score;
+    const totalTaskPoints = typeof task?.points === 'number' ? task.points : null;
+    if (!submissionId || typeof aiScore !== 'number' || typeof totalTaskPoints !== 'number' || totalTaskPoints <= 0) return;
+    setAiProcessingById((prev) => ({ ...prev, [submissionId]: true }));
+    setSubmissionError('');
+    try {
+      const scaled = (aiScore / 100) * totalTaskPoints;
+      const response = await api.patch(`/submissions/${submissionId}/grade`, { score: scaled });
+      setSubmissions((prev) => prev.map((s) => (s.id === submissionId ? response.data : s)));
+    } catch (err) {
+      setSubmissionError(getErrorMessage(err, 'Failed to apply AI score'));
+    } finally {
+      setAiProcessingById((prev) => {
+        const next = { ...prev };
+        delete next[submissionId];
+        return next;
+      });
+    }
   };
 
   const [isEditTaskOpen, setIsEditTaskOpen] = useState(false);
@@ -193,6 +305,25 @@ const TaskView = () => {
     }
   };
 
+  const downloadSummary = async (submissionId) => {
+    try {
+      const response = await api.get(`/submissions/${submissionId}/summary`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `submission_${submissionId}_summary.txt`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setSubmissionError(getErrorMessage(err, 'Failed to download summary'));
+    }
+  };
+
   const ensureSubmissionForAttachments = async () => {
     if (mySubmission) return mySubmission;
     const payload = { task_id: id, content: submissionContent || '' };
@@ -207,7 +338,24 @@ const TaskView = () => {
 
   const isAllowedFile = (file) => {
     const name = String(file?.name || '').toLowerCase();
-    const okExt = ['.pdf', '.jpg', '.jpeg', '.png', '.zip'].some((ext) => name.endsWith(ext));
+    const okExt = [
+      '.pdf',
+      '.jpg',
+      '.jpeg',
+      '.png',
+      '.zip',
+      '.docx',
+      '.doc',
+      '.pptx',
+      '.ppt',
+      '.txt',
+      '.py',
+      '.ipynb',
+      '.js',
+      '.java',
+      '.c',
+      '.cpp',
+    ].some((ext) => name.endsWith(ext));
     return okExt;
   };
 
@@ -218,7 +366,7 @@ const TaskView = () => {
     setAttachmentsError('');
     for (const f of list) {
       if (!isAllowedFile(f)) {
-        setAttachmentsError('Only PDF, JPG, PNG or ZIP files are allowed.');
+        setAttachmentsError('Only PDF, DOCX, PPTX, JPG, PNG, ZIP, or code/text files are allowed.');
         return;
       }
       if (f.size > 25 * 1024 * 1024) {
@@ -304,6 +452,27 @@ const TaskView = () => {
   useEffect(() => {
     loadSubmissions();
   }, [id, userRole]);
+
+  useEffect(() => {
+    if (userRole !== 'teacher') return;
+    const idsInList = new Set((submissions || []).map((s) => s?.id).filter(Boolean));
+    for (const [sid] of evalPollersRef.current.entries()) {
+      if (!idsInList.has(sid)) clearEvalPoller(sid);
+    }
+    for (const s of submissions || []) {
+      const sid = s?.id;
+      if (!sid) continue;
+      const status = String(s?.evaluation?.status || '').toLowerCase();
+      if (status === 'pending' || status === 'running') startEvalPolling(sid);
+    }
+  }, [submissions, userRole]);
+
+  useEffect(() => {
+    return () => {
+      for (const handle of evalPollersRef.current.values()) clearInterval(handle);
+      evalPollersRef.current.clear();
+    };
+  }, []);
 
   const loadGroups = async () => {
     if (!id) return;
@@ -707,6 +876,13 @@ const TaskView = () => {
                             : 0;
                         const numericScore = typeof s?.score === 'number' ? s.score : null;
                         const aiScore = typeof s?.evaluation?.ai_score === 'number' ? s.evaluation.ai_score : null;
+                        const progress = evaluationProgressById[s.id] || null;
+                        const evalStatus = String(progress?.status || s?.evaluation?.status || '').toLowerCase();
+                        const evalMessage = typeof progress?.message === 'string' ? progress.message : null;
+                        const evalProgress = typeof progress?.progress === 'number' ? progress.progress : null;
+                        const evalError = typeof progress?.error === 'string' ? progress.error : null;
+                        const isEvalActive = evalStatus === 'pending' || evalStatus === 'running';
+                        const isAiBusy = !!aiProcessingById[s.id];
                         const totalTaskPoints = typeof task?.points === 'number' ? task.points : null;
                         const scoreLabel = (() => {
                           if (numericScore === null) return null;
@@ -730,7 +906,15 @@ const TaskView = () => {
                             ? String(numericScore)
                             : numericScore.toFixed(2).replace(/\.?0+$/, '');
                         })();
-                        const markLabel = scoreLabel || (aiScore !== null ? `${aiScore}% (AI)` : null);
+                        const aiLabel = (() => {
+                          if (aiScore === null) return null;
+                          if (typeof totalTaskPoints === 'number' && totalTaskPoints > 0) {
+                            const derived = (aiScore / 100) * totalTaskPoints;
+                            return `${aiScore}% (${derived.toFixed(1)}/${totalTaskPoints}) (AI)`;
+                          }
+                          return `${aiScore}% (AI)`;
+                        })();
+                        const markLabel = scoreLabel || aiLabel;
 
                         return (
                           <div
@@ -755,7 +939,25 @@ const TaskView = () => {
                                   </p>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap justify-end">
+                                {!isQuizSubmission ? (
+                                  <button
+                                    className="px-3 py-1.5 rounded-lg border border-[#eae6f4] dark:border-[#2a2438] bg-white/60 dark:bg-white/5 text-xs font-bold hover:border-primary/40 transition-colors disabled:opacity-60"
+                                    onClick={() => triggerAiGrade(s)}
+                                    disabled={isAiBusy || isEvalActive}
+                                    type="button"
+                                  >
+                                    {isEvalActive ? 'AI Grading...' : 'AI Grade'}
+                                  </button>
+                                ) : null}
+                                <button
+                                  className="px-3 py-1.5 rounded-lg border border-[#eae6f4] dark:border-[#2a2438] bg-white/60 dark:bg-white/5 text-xs font-bold hover:border-primary/40 transition-colors disabled:opacity-60"
+                                  onClick={() => openManualGrade(s)}
+                                  disabled={manualGradeSaving}
+                                  type="button"
+                                >
+                                  {numericScore === null ? 'Manual Grade' : 'Edit Grade'}
+                                </button>
                                 {lockedOut ? (
                                   <span className="text-xs font-semibold px-2 py-1 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">
                                     Locked out
@@ -784,6 +986,24 @@ const TaskView = () => {
                               </div>
                             </div>
                             <div className="p-6">
+                              {isEvalActive ? (
+                                <div className="mb-6">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase tracking-widest">
+                                      AI Evaluation
+                                    </div>
+                                    <div className="text-xs text-[#5d479e] dark:text-[#a094c7]">
+                                      {evalMessage || (evalStatus === 'pending' ? 'Evaluation queued...' : 'Evaluating submission...')}
+                                    </div>
+                                  </div>
+                                  <div className="w-full bg-[#efeaf8] dark:bg-[#2a2438] rounded-full h-2 overflow-hidden border border-[#eae6f4] dark:border-[#2a2438]">
+                                    <div
+                                      className="bg-primary h-2"
+                                      style={{ width: `${evalProgress !== null ? Math.max(0, Math.min(100, evalProgress)) : evalStatus === 'pending' ? 10 : 50}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              ) : null}
                               {s?.evaluation?.quiz_metrics ? (
                                 <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-3">
                                   <div className="bg-[#f9f8fc] dark:bg-[#140f23] p-4 rounded-lg border border-[#eae6f4] dark:border-[#2a2438] text-center">
@@ -814,6 +1034,11 @@ const TaskView = () => {
                                   </div>
                                 </div>
                               ) : null}
+                              {evalStatus === 'failed' ? (
+                                <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 whitespace-pre-wrap">
+                                  {evalError || 'AI evaluation failed'}
+                                </div>
+                              ) : null}
                               <div className="mb-6">
                                 <h5 className="text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-2 tracking-widest">
                                   Submitted Text
@@ -823,13 +1048,46 @@ const TaskView = () => {
                                 </div>
                               </div>
 
-                              {Array.isArray(s.attachments) && s.attachments.length > 0 ? (
+                              {typeof s?.evaluation?.ai_feedback === 'string' && s.evaluation.ai_feedback.trim() ? (
+                                <div className="mb-6">
+                                  <div className="flex items-center justify-between mb-2 gap-3">
+                                    <h5 className="text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase tracking-widest">
+                                      AI Feedback
+                                    </h5>
+                                    {typeof s?.evaluation?.ai_score === 'number' && (s?.score === null || s?.score === undefined) ? (
+                                      <button
+                                        className="px-3 py-1.5 rounded-lg border border-[#eae6f4] dark:border-[#2a2438] bg-white/60 dark:bg-white/5 text-xs font-bold hover:border-primary/40 transition-colors disabled:opacity-60"
+                                        onClick={() => applyAiScoreAsGrade(s)}
+                                        disabled={isAiBusy}
+                                        type="button"
+                                      >
+                                        Apply AI Score
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                  <div className="bg-[#f9f8fc] dark:bg-[#140f23] p-4 rounded-lg text-sm leading-relaxed border border-[#eae6f4] dark:border-[#2a2438] whitespace-pre-wrap">
+                                    {s.evaluation.ai_feedback}
+                                  </div>
+                                </div>
+                              ) : null}
+
+                              {((Array.isArray(s.attachments) && s.attachments.length > 0) || userRole === 'teacher') ? (
                                 <div className="mb-6">
                                   <h5 className="text-xs font-bold text-[#5d479e] dark:text-[#a094c7] uppercase mb-2 tracking-widest">
                                     Attachments
                                   </h5>
                                   <div className="flex flex-wrap gap-2">
-                                    {s.attachments.map((a) => (
+                                    {userRole === 'teacher' ? (
+                                      <button
+                                        className="px-3 py-2 rounded-lg border border-[#eae6f4] dark:border-[#2a2438] bg-white/60 dark:bg-white/5 text-xs font-bold hover:border-primary/40 transition-colors flex items-center gap-2"
+                                        onClick={() => downloadSummary(s.id)}
+                                        type="button"
+                                      >
+                                        <span className="material-symbols-outlined text-base">description</span>
+                                        <span className="max-w-[220px] truncate">AI_Detailed_Summary.txt</span>
+                                      </button>
+                                    ) : null}
+                                    {Array.isArray(s.attachments) ? s.attachments.map((a) => (
                                       <button
                                         key={a.id}
                                         className="px-3 py-2 rounded-lg border border-[#eae6f4] dark:border-[#2a2438] bg-white/60 dark:bg-white/5 text-xs font-bold hover:border-primary/40 transition-colors flex items-center gap-2"
@@ -839,7 +1097,7 @@ const TaskView = () => {
                                         <span className="material-symbols-outlined text-base">attach_file</span>
                                         <span className="max-w-[220px] truncate">{a.filename}</span>
                                       </button>
-                                    ))}
+                                    )) : null}
                                   </div>
                                 </div>
                               ) : null}
@@ -867,6 +1125,83 @@ const TaskView = () => {
               </>
             )}
           </main>
+          {manualGradeSubmission ? (
+            <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
+              <div
+                className="absolute inset-0"
+                onClick={() => {
+                  if (manualGradeSaving) return;
+                  setManualGradeSubmission(null);
+                }}
+              ></div>
+              <div className="relative bg-white dark:bg-[#1c1633] w-full max-w-[700px] max-h-[90vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-700">
+                <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                  <h2 className="text-xl font-bold text-[#110d1c] dark:text-white">Manual Grading</h2>
+                  <button
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                    onClick={() => {
+                      if (manualGradeSaving) return;
+                      setManualGradeSubmission(null);
+                    }}
+                    type="button"
+                  >
+                    <span className="material-symbols-outlined">close</span>
+                  </button>
+                </div>
+                <div className="p-6 space-y-4 flex-1 min-h-0 overflow-y-auto">
+                  {manualGradeError ? (
+                    <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
+                      {manualGradeError}
+                    </div>
+                  ) : null}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                      Score
+                    </label>
+                    <input
+                      className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                      type="number"
+                      value={manualGradeScore}
+                      onChange={(e) => setManualGradeScore(e.target.value)}
+                      disabled={manualGradeSaving}
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                      Feedback
+                    </label>
+                    <textarea
+                      className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-800 focus:border-primary focus:ring-primary text-sm"
+                      rows="6"
+                      value={manualGradeFeedback}
+                      onChange={(e) => setManualGradeFeedback(e.target.value)}
+                      disabled={manualGradeSaving}
+                    />
+                  </div>
+                </div>
+                <div className="p-6 border-t border-gray-100 dark:border-gray-800 flex items-center justify-end gap-3">
+                  <button
+                    className="px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm font-bold hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-60"
+                    onClick={() => setManualGradeSubmission(null)}
+                    disabled={manualGradeSaving}
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-colors disabled:opacity-60"
+                    onClick={saveManualGrade}
+                    disabled={manualGradeSaving}
+                    type="button"
+                  >
+                    {manualGradeSaving ? 'Saving...' : 'Save Grade'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
           {isEditTaskOpen ? (
             <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
               <div
@@ -1392,7 +1727,7 @@ const TaskView = () => {
                                   <span className="material-symbols-outlined">attach_file</span>
                                   Attachments
                                 </div>
-                                <div className="text-xs text-gray-500 mt-1">Drag & drop or browse. PDF, DOCX, PPTX, JPG, PNG, ZIP (Max 25MB)</div>
+                                <div className="text-xs text-gray-500 mt-1">Drag & drop or browse. PDF, DOCX, PPTX, JPG, PNG, ZIP, TXT, PY, IPYNB, JS, JAVA, C, CPP (Max 25MB)</div>
                               </div>
                               <div className="flex items-center gap-3">
                                 <input
@@ -1400,7 +1735,7 @@ const TaskView = () => {
                                   type="file"
                                   multiple
                                   className="hidden"
-                                  accept=".pdf,.jpg,.jpeg,.png,.zip,.docx,.pptx,.doc,.ppt,application/pdf,image/jpeg,image/png,application/zip,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/msword,application/vnd.ms-powerpoint"
+                                  accept=".pdf,.jpg,.jpeg,.png,.zip,.docx,.pptx,.doc,.ppt,.txt,.py,.ipynb,.js,.java,.c,.cpp,application/pdf,image/jpeg,image/png,application/zip,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/msword,application/vnd.ms-powerpoint,text/plain,application/javascript,text/javascript,application/octet-stream,application/x-ipynb+json"
                                   onChange={(e) => uploadFiles(e.target.files)}
                                   disabled={attachmentsUploading}
                                 />

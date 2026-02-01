@@ -71,7 +71,11 @@ class RateLimiter:
         # Rate limits per feature per user (max calls per window)
         self.limits = {
             "code_feedback": {"max": 20, "window": 3600},    # 20/hour
+            "code_grade": {"max": 30, "window": 3600},      # 30/hour
             "doc_analysis": {"max": 20, "window": 3600},     # 20/hour
+            "doc_summary": {"max": 20, "window": 3600},      # 20/hour
+            "doc_analysis_part": {"max": 60, "window": 3600},  # 60/hour
+            "doc_summary_part": {"max": 60, "window": 3600},   # 60/hour
             "schedule": {"max": 60, "window": 3600},         # 60/hour (cached)
             "chat": {"max": 100, "window": 3600},            # 100/hour
             "extension_analysis": {"max": 30, "window": 3600},  # 30/hour
@@ -678,6 +682,129 @@ Keep response under 300 words. Be encouraging but specific."""
             use_grading_key=True
         )
 
+    async def grade_code_submission(
+        self,
+        *,
+        user_uid: str,
+        code: str,
+        language: str,
+        task_title: str,
+        task_description: str,
+        role: str = "teacher",
+    ) -> dict:
+        code_snippet = (code or "")[:12000]
+
+        prompt = f"""TASK: {task_title}
+REQUIREMENTS: {task_description[:1200]}
+LANGUAGE: {language}
+
+SUBMITTED CODE:
+```{language}
+{code_snippet}
+```
+
+Grade this code WITHOUT executing it. Evaluate:
+- apparent correctness vs the requirements (best-effort from static reading)
+- code quality and clarity
+- edge cases handled or missed
+- structure, naming, and style
+
+Return ONLY valid JSON in this format:
+{{
+  "correctness_assessment": "string",
+  "quality_assessment": "string",
+  "key_issues": ["issue 1", "issue 2"],
+  "improvements": ["improvement 1", "improvement 2"],
+  "suggested_score": 75
+}}
+
+Rules:
+- Do not invent missing requirements.
+- If requirements are vague, state assumptions.
+- suggested_score must be an integer 0-100."""
+
+        fallback_response = {
+            "correctness_assessment": "Unable to grade code automatically.",
+            "quality_assessment": "Groq unavailable.",
+            "key_issues": ["Groq unavailable"],
+            "improvements": [],
+            "suggested_score": 0,
+            "raw_response": "Fallback - Groq unavailable",
+        }
+
+        try:
+            response = await self.safe_call(
+                feature="code_grade",
+                user_uid=user_uid,
+                role=role if role in {"teacher", "student"} else "teacher",
+                prompt=prompt,
+                system_prompt="You are a strict but fair programming assignment grader. Always output valid JSON only.",
+                fallback=json.dumps(fallback_response),
+                use_cache=True,
+                cache_ttl=86400,
+                max_tokens=800,
+                temperature=0.0,
+                use_grading_key=True,
+            )
+
+            response = response.strip()
+            if response.startswith("```json"):
+                response = response[7:]
+            if response.endswith("```"):
+                response = response[:-3]
+            response = response.strip()
+
+            parsed = json.loads(response)
+            if not isinstance(parsed, dict):
+                return fallback_response
+            return parsed
+        except Exception as e:
+            logger.error(f"Error grading code submission: {e}")
+            return fallback_response
+
+    def _split_text(self, text: str, *, max_chars: int, overlap_chars: int = 0) -> list[str]:
+        raw = (text or "").strip()
+        if not raw:
+            return [""]
+        if len(raw) <= max_chars:
+            return [raw]
+
+        parts = re.split(r"\n{2,}", raw)
+        chunks: list[str] = []
+        current: list[str] = []
+        current_len = 0
+
+        for p in parts:
+            p = p.strip()
+            if not p:
+                continue
+            add_len = len(p) + (2 if current else 0)
+            if current and current_len + add_len > max_chars:
+                chunk = "\n\n".join(current).strip()
+                if chunk:
+                    chunks.append(chunk)
+                current = []
+                current_len = 0
+
+                if overlap_chars > 0 and chunks:
+                    tail = chunks[-1][-overlap_chars:]
+                    tail = tail.strip()
+                    if tail:
+                        current = [tail]
+                        current_len = len(tail)
+
+            current.append(p)
+            current_len += add_len
+
+        if current:
+            chunk = "\n\n".join(current).strip()
+            if chunk:
+                chunks.append(chunk)
+
+        if not chunks:
+            return [raw[:max_chars]]
+        return chunks
+
     async def analyze_document(
         self,
         user_uid: str,
@@ -695,14 +822,65 @@ Keep response under 300 words. Be encouraging but specific."""
         Analyze document submission with Groq
         Uses grading API key if available.
         """
+        content = content or ""
+        is_long = len(content) > 12000
         content_preview = content[:3000] if len(content) > 3000 else content
+        content_tail = content[-2000:] if len(content) > 5000 else ""
+
+        chunk_summaries: list[str] = []
+        if is_long:
+            chunks = self._split_text(content, max_chars=8500, overlap_chars=350)
+            chunk_tasks: list[str] = []
+            for idx, chunk in enumerate(chunks, 1):
+                part_prompt = f"""TASK: {task_title}
+REQUIREMENTS: {task_description[:800]}
+
+SUBMISSION PART {idx}/{len(chunks)}:
+\"\"\"{chunk}\"\"\"
+
+Summarize this part for grading:
+- Main points (bullets)
+- Evidence/examples used (bullets)
+- Missing/unclear items (bullets, if any)
+
+Do not invent facts. Keep under 180 words."""
+
+                chunk_tasks.append(
+                    self.safe_call(
+                        feature="doc_analysis_part",
+                        user_uid=user_uid,
+                        prompt=part_prompt,
+                        system_prompt="You extract faithful summaries to support grading.",
+                        fallback="",
+                        use_cache=True,
+                        cache_ttl=86400,
+                        max_tokens=300,
+                        temperature=0.0,
+                        use_grading_key=True,
+                        role="teacher",
+                    )
+                )
+            chunk_summaries = [s for s in await asyncio.gather(*chunk_tasks) if isinstance(s, str) and s.strip()]
+
+        tail_block = ""
+        if content_tail:
+            tail_block = f"""
+SUBMISSION ENDING (excerpt):
+\"\"\"{content_tail}\"\"\""""
+
+        chunks_block = ""
+        if chunk_summaries:
+            parts_text = "\n".join([f"[Part {i + 1}] {t}" for i, t in enumerate(chunk_summaries)])
+            chunks_block = f"""
+CHUNKED PART SUMMARIES (covers the full submission):
+{parts_text}"""
 
         prompt = f"""ASSIGNMENT: {task_title}
 REQUIREMENTS: {task_description[:500]}
 MINIMUM WORDS: {min_words}
 
 SUBMISSION PREVIEW:
-"{content_preview}"
+\"\"\"{content_preview}\"\"\"{tail_block}{chunks_block}
 
 METRICS:
 - Word count: {word_count}
@@ -720,7 +898,7 @@ Evaluate this submission and provide your response in the following JSON format:
 
 Be constructive and specific. The score should be 0-100."""
 
-        system_prompt = "You are an academic writing evaluator. Always respond with valid JSON."
+        system_prompt = "You are an academic writing evaluator. Always respond with valid JSON. Use the provided summaries and excerpts only."
 
         fallback_response = {
             "quality_assessment": "Document meets basic requirements.",
@@ -739,9 +917,10 @@ Be constructive and specific. The score should be 0-100."""
                 prompt=prompt,
                 system_prompt=system_prompt,
                 fallback=json.dumps(fallback_response),
-                use_cache=False,
-                max_tokens=600,
-                temperature=0.5,
+                use_cache=True,
+                cache_ttl=86400,
+                max_tokens=700,
+                temperature=0.0,
                 use_grading_key=True
             )
             
@@ -760,6 +939,113 @@ Be constructive and specific. The score should be 0-100."""
         except Exception as e:
             logger.error(f"Error in document analysis: {e}")
             return fallback_response
+
+    async def summarize_document(
+        self,
+        *,
+        user_uid: str,
+        content: str,
+        task_title: str,
+        task_description: str,
+        role: str = "teacher",
+    ) -> str:
+        content = content or ""
+        is_long = len(content) > 12000
+        content_preview = content[:9000] if len(content) > 9000 else content
+
+        if is_long:
+            chunks = self._split_text(content, max_chars=9000, overlap_chars=400)
+            chunk_tasks: list[str] = []
+            for idx, chunk in enumerate(chunks, 1):
+                part_prompt = f"""TASK: {task_title}
+REQUIREMENTS: {task_description[:800]}
+
+SUBMISSION PART {idx}/{len(chunks)}:
+\"\"\"{chunk}\"\"\"
+
+Write a faithful summary of this part:
+- Key points (bullets)
+- Important technical details (bullets)
+- Anything missing/unclear (bullets, if any)
+
+Keep under 220 words."""
+                chunk_tasks.append(
+                    self.safe_call(
+                        feature="doc_summary_part",
+                        user_uid=user_uid,
+                        prompt=part_prompt,
+                        system_prompt="You summarize student submissions for teachers. Be faithful to the text.",
+                        fallback="",
+                        use_cache=True,
+                        cache_ttl=86400,
+                        max_tokens=350,
+                        temperature=0.0,
+                        use_grading_key=True,
+                        role=role if role in {"teacher", "student"} else "teacher",
+                    )
+                )
+            chunk_summaries = [s for s in await asyncio.gather(*chunk_tasks) if isinstance(s, str) and s.strip()]
+
+            combined_prompt = f"""TASK: {task_title}
+REQUIREMENTS: {task_description[:800]}
+
+You are given summaries of all parts of the student's submission. Produce a single detailed summary for a teacher:
+1) One-paragraph executive summary
+2) Key points as bullets (10-16 bullets)
+3) What is missing or unclear (if any)
+
+PART SUMMARIES:
+{chr(10).join([f"[Part {i+1}] {t}" for i, t in enumerate(chunk_summaries)])}
+
+Do not invent facts. Keep it under 900 words."""
+
+            return await self.safe_call(
+                feature="doc_summary",
+                user_uid=user_uid,
+                prompt=combined_prompt,
+                system_prompt="You summarize student submissions for teachers. Be faithful to the text.",
+                fallback="",
+                use_cache=True,
+                cache_ttl=86400,
+                max_tokens=1200,
+                temperature=0.0,
+                use_grading_key=True,
+                role=role if role in {"teacher", "student"} else "teacher",
+            )
+
+        prompt = f"""TASK: {task_title}
+REQUIREMENTS: {task_description[:800]}
+
+SUBMISSION:
+\"\"\"{content_preview}\"\"\"
+
+Write a detailed, teacher-friendly summary with:
+1) One-paragraph executive summary
+2) Key points as bullets (8-12 bullets)
+3) What is missing or unclear (if any)
+
+Do not invent facts. Keep it under 700 words."""
+
+        fallback = content_preview.strip()
+        if fallback:
+            words = re.findall(r"\\S+", fallback)
+            fallback = " ".join(words[:300])
+        else:
+            fallback = "No content provided."
+
+        return await self.safe_call(
+            feature="doc_summary",
+            user_uid=user_uid,
+            prompt=prompt,
+            system_prompt="You summarize student submissions for teachers. Be faithful to the text.",
+            fallback=fallback,
+            use_cache=True,
+            cache_ttl=86400,
+            max_tokens=900,
+            temperature=0.0,
+            use_grading_key=True,
+            role=role if role in {"teacher", "student"} else "teacher",
+        )
 
     async def generate_test_cases(
         self,

@@ -76,6 +76,28 @@ const SubjectView = () => {
     return `${root}${u}`;
   };
 
+  const makeGradientStyle = (seed) => {
+    const s = String(seed || '');
+    let h = 0;
+    for (let i = 0; i < s.length; i += 1) {
+      h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    }
+    const hue1 = h % 360;
+    const hue2 = (hue1 + 60 + ((h >>> 8) % 90)) % 360;
+    const hue3 = (hue2 + 30 + ((h >>> 16) % 80)) % 360;
+    const angle = 90 + (h % 180);
+    const a1 = 0.30;
+    const a2 = 0.16;
+    const a3 = 0.10;
+    return {
+      backgroundImage: `radial-gradient(circle at 30% 20%, hsla(${hue3}, 95%, 65%, 0.18), transparent 62%), linear-gradient(${angle}deg, hsla(${hue1}, 92%, 62%, ${a1}), hsla(${hue2}, 92%, 58%, ${a2}), hsla(${hue3}, 92%, 60%, ${a3}))`,
+    };
+  };
+
+  const subjectHeroStyle = useMemo(() => {
+    return makeGradientStyle(subject?.id || subject?.join_code || id || '');
+  }, [id, subject?.id, subject?.join_code]);
+
   const groupPreview = useMemo(() => {
     if (taskKind !== 'group') return null;
     const size = Number(groupSize);
@@ -407,7 +429,10 @@ const SubjectView = () => {
                 >
                   <span>Create Task</span>
                 </button>
-                <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border border-gray-200 dark:border-white/10 bg-gradient-to-br from-primary/20 to-primary/5"></div>
+                <div
+                  className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border border-gray-200 dark:border-white/10"
+                  style={subjectHeroStyle}
+                ></div>
               </div>
             </div>
           </header>
@@ -438,7 +463,7 @@ const SubjectView = () => {
                 <div className="mb-10">
                   <div className="bg-white dark:bg-[#1c1633] rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.05)] overflow-hidden border border-[#eae6f4] dark:border-[#2d2644]">
                     <div className="flex flex-col lg:flex-row">
-                      <div className="w-full lg:w-1/3 h-48 lg:h-auto bg-gradient-to-br from-primary/20 to-primary/5"></div>
+                      <div className="w-full lg:w-1/3 h-48 lg:h-auto" style={subjectHeroStyle}></div>
                       <div className="flex flex-1 flex-col p-6 md:p-8">
                         <div className="flex justify-between items-start mb-4 gap-4">
                           <div>
@@ -612,7 +637,16 @@ const SubjectView = () => {
                         {roster.slice(0, 20).map((s) => (
                           <div
                             key={s.uid}
-                            className="flex items-center justify-between gap-4 p-4 rounded-xl border border-[#eae6f4] dark:border-[#2d2644] bg-white/50 dark:bg-white/5"
+                            className="flex items-center justify-between gap-4 p-4 rounded-xl border border-[#eae6f4] dark:border-[#2d2644] bg-white/50 dark:bg-white/5 cursor-pointer hover:border-primary/40 transition-colors"
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => navigate(`/teacher/subject/${id}/student/${s.uid}/marks`, { state: { student: s } })}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                navigate(`/teacher/subject/${id}/student/${s.uid}/marks`, { state: { student: s } });
+                              }
+                            }}
                           >
                             <div className="flex items-center gap-3 min-w-0">
                               <div className="size-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold">
@@ -628,7 +662,8 @@ const SubjectView = () => {
                               </div>
                             </div>
                             <button
-                              onClick={async () => {
+                              onClick={async (e) => {
+                                e.stopPropagation();
                                 try {
                                   await navigator.clipboard.writeText(s.uid);
                                 } catch {}
@@ -769,9 +804,10 @@ const SubjectView = () => {
               <>
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 mb-8 shadow-sm">
                   <div className="flex flex-col md:flex-row md:items-center gap-6">
-                    <div className="bg-primary/10 rounded-xl size-32 flex items-center justify-center overflow-hidden">
-                      <div className="bg-gradient-to-br from-primary/20 to-primary/5 size-full"></div>
-                    </div>
+                    <div
+                      className="rounded-xl size-32 flex items-center justify-center overflow-hidden bg-primary/10"
+                      style={subjectHeroStyle}
+                    ></div>
                     <div className="flex-1">
                       <div className="flex flex-wrap items-center gap-3 mb-1">
                         <h1 className="text-slate-900 dark:text-white text-3xl font-extrabold tracking-tight">

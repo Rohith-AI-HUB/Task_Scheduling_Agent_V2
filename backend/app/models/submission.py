@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -27,6 +27,7 @@ class CodeEvaluationResults(BaseModel):
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     test_results: list[TestCaseResult] = Field(default_factory=list)
+    groq_analysis: Optional[dict[str, Any]] = None
 
 
 class DocumentMetrics(BaseModel):
@@ -71,7 +72,9 @@ class SubmissionEvaluation(BaseModel):
     document_metrics: DocumentMetrics = Field(default_factory=DocumentMetrics)
     quiz_metrics: Optional[QuizAttemptMetrics] = None
     ai_score: Optional[int] = Field(default=None, ge=0, le=100)
+    ai_points: Optional[float] = Field(default=None, ge=0)
     ai_feedback: Optional[str] = Field(default=None, max_length=10000)
+    document_summary: Optional[str] = Field(default=None, max_length=20000)
     evaluated_at: Optional[datetime] = None
     last_error: Optional[str] = Field(default=None, max_length=2000)
 
@@ -138,3 +141,17 @@ class QuizGenerateRequest(BaseModel):
     document_content: str = Field(min_length=1)
     topic: str = Field(min_length=1, max_length=200)
     num_questions: int = Field(ge=5, le=50, default=10)
+
+
+class StudentTaskMarkItem(BaseModel):
+    task_id: str
+    task_title: str
+    task_type: Optional[str] = None
+    task_points: Optional[int] = None
+    task_kind: Optional[str] = None
+    submission_id: Optional[str] = None
+    group_id: Optional[str] = None
+    submitted_at: Optional[datetime] = None
+    score: Optional[float] = None
+    status: Optional[EvaluationStatus] = None
+    ai_score: Optional[int] = Field(default=None, ge=0, le=100)

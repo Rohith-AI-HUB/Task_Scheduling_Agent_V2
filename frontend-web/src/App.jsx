@@ -12,6 +12,7 @@ import TaskView from './pages/TaskView';
 import QuizAttempt from './pages/QuizAttempt';
 import Profile from './pages/Profile';
 import Calendar from './pages/Calendar';
+import TeacherStudentMarks from './pages/TeacherStudentMarks';
 
 function App() {
   return (
@@ -51,6 +52,14 @@ function App() {
             element={
               <ProtectedRoute requireRole="teacher">
                 <TeacherClassrooms />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/subject/:subjectId/student/:studentUid/marks"
+            element={
+              <ProtectedRoute requireRole="teacher">
+                <TeacherStudentMarks />
               </ProtectedRoute>
             }
           />

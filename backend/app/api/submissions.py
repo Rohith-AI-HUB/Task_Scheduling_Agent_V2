@@ -4,10 +4,11 @@ from uuid import uuid4
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pymongo.errors import DuplicateKeyError
 
 from app.config import settings
+from app.ai.evaluator.doc_analyzer import extract_text_from_pdf
 from app.database.collections import get_collection
 from app.models.submission import (
     BatchEvaluateRequest,
@@ -17,14 +18,17 @@ from app.models.submission import (
     SubmissionGradeRequest,
     SubmissionEvaluation,
     SubmissionResponse,
+    StudentTaskMarkItem,
     SubmissionUpsertRequest,
 )
+from app.services.groq_service import GroqService
 from app.services.submission_service import queue_evaluation
 from app.utils.dependencies import get_current_student, get_current_teacher, get_current_user
 
 router = APIRouter()
 
-_ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".zip", ".pptx", ".ppt", ".doc", ".docx"}
+_CODE_EXTENSIONS = {".py", ".ipynb", ".js", ".java", ".c", ".cpp", ".txt"}
+_ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".zip", ".pptx", ".ppt", ".doc", ".docx", *_CODE_EXTENSIONS}
 _ALLOWED_CONTENT_TYPES = {
     "application/pdf",
     "image/jpeg",
@@ -35,6 +39,12 @@ _ALLOWED_CONTENT_TYPES = {
     "application/vnd.ms-powerpoint",  # .ppt
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
     "application/msword",  # .doc
+    "text/plain",
+    "application/octet-stream",
+    "text/javascript",
+    "application/javascript",
+    "text/x-python",
+    "application/x-ipynb+json",
 }
 
 
@@ -123,8 +133,14 @@ def _validate_file(file: UploadFile) -> None:
     ext = Path(filename).suffix.lower()
     if ext not in _ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File type not allowed")
-    if file.content_type and file.content_type not in _ALLOWED_CONTENT_TYPES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File type not allowed")
+    if file.content_type:
+        ct = str(file.content_type).lower()
+        if ext in _CODE_EXTENSIONS:
+            if not (ct.startswith("text/") or ct in {"application/octet-stream", "application/javascript"}):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File type not allowed")
+        else:
+            if ct not in _ALLOWED_CONTENT_TYPES:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File type not allowed")
 
 
 async def _save_upload(file: UploadFile, dest_path: Path) -> int:
@@ -475,9 +491,78 @@ async def list_submissions(
     return [_serialize_submission(s) for s in submissions]
 
 
+@router.get("/student-marks", response_model=list[StudentTaskMarkItem])
+async def list_student_marks(
+    subject_id: str = Query(...),
+    student_uid: str = Query(...),
+    current_teacher: dict = Depends(get_current_teacher),
+):
+    if not ObjectId.is_valid(subject_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid subject id")
+
+    subject_oid = ObjectId(subject_id)
+    await _ensure_teacher_owns_subject(current_teacher["uid"], subject_oid)
+
+    tasks_collection = get_collection("tasks")
+    submissions_collection = get_collection("submissions")
+    groups_collection = get_collection("groups")
+
+    tasks = await (
+        tasks_collection.find({"subject_id": subject_oid})
+        .sort([("deadline", 1), ("updated_at", -1), ("_id", -1)])
+        .to_list(length=None)
+    )
+
+    items: list[StudentTaskMarkItem] = []
+    for t in tasks:
+        tid = t.get("_id")
+        if not isinstance(tid, ObjectId):
+            continue
+
+        task_kind = str(t.get("type") or "individual")
+
+        submission: dict | None = None
+        if task_kind == "group":
+            groups = await groups_collection.find({"task_id": tid, "member_uids": student_uid}).to_list(length=None)
+            group_ids = [g.get("_id") for g in groups if isinstance(g, dict) and isinstance(g.get("_id"), ObjectId)]
+            if group_ids:
+                submission = await submissions_collection.find_one(
+                    {"task_id": tid, "group_id": {"$in": group_ids}},
+                    sort=[("submitted_at", -1), ("_id", -1)],
+                )
+        else:
+            submission = await submissions_collection.find_one(
+                {"task_id": tid, "student_uid": student_uid, "group_id": None},
+                sort=[("submitted_at", -1), ("_id", -1)],
+            )
+
+        evaluation = submission.get("evaluation") if isinstance(submission, dict) else None
+        status_value = evaluation.get("status") if isinstance(evaluation, dict) else None
+        ai_score_value = evaluation.get("ai_score") if isinstance(evaluation, dict) else None
+
+        items.append(
+            StudentTaskMarkItem(
+                task_id=str(tid),
+                task_title=str(t.get("title") or ""),
+                task_type=t.get("task_type"),
+                task_points=t.get("points"),
+                task_kind=task_kind,
+                submission_id=str(submission.get("_id")) if isinstance(submission, dict) and submission.get("_id") else None,
+                group_id=str(submission.get("group_id")) if isinstance(submission, dict) and submission.get("group_id") is not None else None,
+                submitted_at=submission.get("submitted_at") if isinstance(submission, dict) else None,
+                score=submission.get("score") if isinstance(submission, dict) else None,
+                status=status_value,
+                ai_score=ai_score_value,
+            )
+        )
+
+    return items
+
+
 @router.post("/{submission_id}/evaluate", response_model=SubmissionResponse)
 async def evaluate_submission(
     submission_id: str,
+    force: bool = Query(default=False),
     current_teacher: dict = Depends(get_current_teacher),
 ):
     if not ObjectId.is_valid(submission_id):
@@ -489,7 +574,7 @@ async def evaluate_submission(
     task = await _find_task_or_404(submission["task_id"])
     await _ensure_teacher_owns_subject(current_teacher["uid"], task["subject_id"])
 
-    updated = await queue_evaluation(submission_id=submission_oid)
+    updated = await queue_evaluation(submission_id=submission_oid, force=force)
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found")
     return _serialize_submission(updated)
@@ -585,9 +670,80 @@ async def get_evaluation_progress(
     )
 
 
+@router.get("/{submission_id}/summary")
+async def get_submission_summary(
+    submission_id: str,
+    refresh: bool = Query(default=False),
+    current_user: dict = Depends(get_current_user),
+):
+    if not ObjectId.is_valid(submission_id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid submission id")
+
+    submission_oid = ObjectId(submission_id)
+    submissions_collection = get_collection("submissions")
+    submission = await submissions_collection.find_one({"_id": submission_oid})
+    if not submission:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found")
+
+    task = await _find_task_or_404(submission["task_id"])
+    subject_oid = task["subject_id"]
+
+    role = str(current_user.get("role") or "")
+    if role == "teacher":
+        await _ensure_teacher_owns_subject(current_user["uid"], subject_oid)
+    else:
+        if submission.get("group_id") is not None:
+            groups_collection = get_collection("groups")
+            group = await groups_collection.find_one({"_id": submission["group_id"], "member_uids": current_user["uid"]})
+            if not group:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        else:
+            if submission.get("student_uid") != current_user.get("uid"):
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        await _ensure_student_enrolled(current_user["uid"], subject_oid)
+
+    evaluation = submission.get("evaluation") if isinstance(submission.get("evaluation"), dict) else {}
+    cached = evaluation.get("document_summary")
+    if isinstance(cached, str) and cached.strip() and not refresh:
+        return Response(content=cached, media_type="text/plain; charset=utf-8")
+
+    text = str(submission.get("content") or "")
+    for a in submission.get("attachments") or []:
+        if not isinstance(a, dict):
+            continue
+        path = a.get("path")
+        filename = str(a.get("filename") or "")
+        if not path or not filename.lower().endswith(".pdf"):
+            continue
+        try:
+            extracted = extract_text_from_pdf(Path(path))
+            if extracted:
+                text = (text + "\n\n" + extracted).strip()
+        except Exception:
+            continue
+
+    groq = GroqService()
+    summary = await groq.summarize_document(
+        user_uid=str(current_user.get("uid") or submission.get("student_uid") or ""),
+        content=text,
+        task_title=str(task.get("title") or ""),
+        task_description=str(task.get("description") or ""),
+        role=role if role in {"teacher", "student"} else "teacher",
+    )
+
+    now = datetime.utcnow()
+    await submissions_collection.update_one(
+        {"_id": submission_oid},
+        {"$set": {"evaluation.document_summary": summary, "updated_at": now}},
+    )
+
+    return Response(content=summary, media_type="text/plain; charset=utf-8")
+
+
 @router.post("/batch/evaluate", response_model=BatchEvaluateResponse)
 async def batch_evaluate(
     request: BatchEvaluateRequest,
+    force: bool = Query(default=False),
     current_teacher: dict = Depends(get_current_teacher),
 ):
     if not ObjectId.is_valid(request.task_id):
@@ -605,7 +761,7 @@ async def batch_evaluate(
         sid = s.get("_id")
         if not sid:
             continue
-        updated = await queue_evaluation(submission_id=sid)
+        updated = await queue_evaluation(submission_id=sid, force=force)
         if updated is not None:
             queued += 1
 

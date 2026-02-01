@@ -30,10 +30,43 @@ def _build_code_feedback(code_results: dict[str, Any]) -> str:
     earned_points = int(code_results.get("earned_points") or 0)
     errors = code_results.get("errors") or []
     warnings = code_results.get("warnings") or []
+    groq_analysis = code_results.get("groq_analysis")
+
+    if groq_analysis and isinstance(groq_analysis, dict):
+        sections.append("=== CODE EVALUATION ===")
+
+        correctness = groq_analysis.get("correctness_assessment")
+        if correctness:
+            sections.append(f"\nCorrectness: {correctness}")
+
+        quality = groq_analysis.get("quality_assessment")
+        if quality:
+            sections.append(f"\nQuality: {quality}")
+
+        key_issues = groq_analysis.get("key_issues")
+        if key_issues and isinstance(key_issues, list):
+            clean = [str(x).strip() for x in key_issues if str(x).strip()]
+            if clean:
+                sections.append("\nKey Issues:")
+                for imp in clean[:8]:
+                    sections.append(f"- {imp}")
+
+        improvements = groq_analysis.get("improvements")
+        if improvements and isinstance(improvements, list):
+            clean = [str(x).strip() for x in improvements if str(x).strip()]
+            if clean:
+                sections.append("\nImprovements:")
+                for imp in clean[:8]:
+                    sections.append(f"- {imp}")
+
+        suggested = groq_analysis.get("suggested_score")
+        if suggested is not None:
+            sections.append(f"\nSuggested Score (Groq): {suggested}")
 
     # Test results summary
     if passed or failed:
-        sections.append("=== CODE EVALUATION ===")
+        if not sections:
+            sections.append("=== CODE EVALUATION ===")
 
         if total_points > 0:
             sections.append(f"Test Results: {passed}/{passed + failed} tests passed ({earned_points}/{total_points} points)")
