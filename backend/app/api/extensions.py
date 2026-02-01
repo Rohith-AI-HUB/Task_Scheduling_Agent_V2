@@ -7,6 +7,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
 
 from app.database.connection import get_db
+from bson import ObjectId
+
 from app.models.extension import (
     ExtensionRequestCreate,
     ExtensionRequestResponse,
@@ -17,6 +19,7 @@ from app.models.extension import (
 )
 from app.services.extension_service import ExtensionService
 from app.services.groq_service import groq_service
+from app.services.push_notification_service import send_push_to_user
 from app.utils.dependencies import get_current_user
 
 router = APIRouter()
@@ -47,6 +50,20 @@ async def create_extension_request(
             request_data=request_data,
             groq_service=groq_service
         )
+        try:
+            db = get_db()
+            task = await db.tasks.find_one({"_id": ObjectId(request_data.task_id)})
+            subject = await db.subjects.find_one({"_id": task["subject_id"]}) if task else None
+            teacher_uid = subject.get("teacher_uid") if subject else None
+            if teacher_uid:
+                await send_push_to_user(
+                    teacher_uid,
+                    "New extension request",
+                    f'{current_user.get("name") or "A student"} requested an extension for {extension.task_title or "a task"}.',
+                    "/teacher/dashboard",
+                )
+        except Exception:
+            pass
         return extension
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -163,6 +180,15 @@ async def approve_extension_request(
             response=review_data.response,
             approved_deadline=review_data.approved_deadline
         )
+        try:
+            await send_push_to_user(
+                extension.student_uid,
+                "Extension approved",
+                f'Your extension request for {extension.task_title or "a task"} was approved.',
+                "/student/dashboard",
+            )
+        except Exception:
+            pass
 
         return ExtensionReviewResponse(
             success=True,
@@ -196,6 +222,15 @@ async def deny_extension_request(
             teacher_uid=current_user["uid"],
             response=review_data.response
         )
+        try:
+            await send_push_to_user(
+                extension.student_uid,
+                "Extension denied",
+                f'Your extension request for {extension.task_title or "a task"} was denied.',
+                "/student/dashboard",
+            )
+        except Exception:
+            pass
 
         return ExtensionReviewResponse(
             success=True,

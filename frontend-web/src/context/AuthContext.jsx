@@ -99,6 +99,29 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const logout = async () => {
+    setError(null);
+    setNeedsRegistration(false);
+    setBackendUser(null);
+    setUserRole(null);
+    setCurrentUser(null);
+
+    try {
+      sessionStorage.removeItem('pendingRole');
+      sessionStorage.removeItem('pendingName');
+    } catch {}
+
+    try {
+      localStorage.removeItem('authToken');
+    } catch {}
+
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  };
+
   useEffect(() => {
     // Listen to auth state changes
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -135,6 +158,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     error,
     needsRegistration,
+    logout,
     isAuthenticated: !!currentUser,
     isTeacher: userRole === 'teacher',
     isStudent: userRole === 'student',

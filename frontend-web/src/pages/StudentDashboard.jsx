@@ -1,16 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import aiService from '../services/aiService';
-import { logout } from '../services/authService';
+import { enablePushNotifications } from '../services/pushNotifications';
 import AISchedule from '../components/AISchedule';
 import DueSoon from '../components/DueSoon';
 import ChatAssistant from '../components/ChatAssistant';
 
 const StudentDashboard = () => {
-  const { currentUser, backendUser } = useAuth();
+  const { currentUser, backendUser, logout } = useAuth();
   const navigate = useNavigate();
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationsButtonRef = useRef(null);
+  const notificationsPanelRef = useRef(null);
 
   const resolvePhotoUrl = (photoUrl) => {
     if (!photoUrl) return '';
@@ -60,6 +63,29 @@ const StudentDashboard = () => {
     loadExtensions();
   }, []);
 
+  useEffect(() => {
+    if (!isNotificationsOpen) return;
+
+    const onMouseDown = (e) => {
+      const btn = notificationsButtonRef.current;
+      const panel = notificationsPanelRef.current;
+      if (btn && btn.contains(e.target)) return;
+      if (panel && panel.contains(e.target)) return;
+      setIsNotificationsOpen(false);
+    };
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setIsNotificationsOpen(false);
+    };
+
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isNotificationsOpen]);
+
   const handleLogout = async () => {
     await logout();
     navigate('/login');
@@ -89,6 +115,39 @@ const StudentDashboard = () => {
     if (Number.isNaN(d.getTime())) return '';
     return d.toLocaleString();
   };
+
+  const notifications = useMemo(() => {
+    const toTime = (value) => {
+      const t = new Date(value || 0).getTime();
+      return Number.isFinite(t) ? t : 0;
+    };
+
+    const list = (extensions || [])
+      .slice()
+      .sort((a, b) => toTime(b.updated_at || b.created_at) - toTime(a.updated_at || a.created_at))
+      .slice(0, 8)
+      .map((ext) => {
+        const status = String(ext.status || 'pending');
+        const title =
+          status === 'approved'
+            ? `Extension approved: ${ext.task_title || 'Task'}`
+            : status === 'denied'
+              ? `Extension denied: ${ext.task_title || 'Task'}`
+              : `Extension pending: ${ext.task_title || 'Task'}`;
+        const when = ext.reviewed_at || ext.updated_at || ext.created_at;
+        const meta =
+          status === 'pending'
+            ? `Requested: ${formatDateTime(ext.requested_deadline)}`
+            : `Updated: ${formatDateTime(when)}`;
+        return { id: ext.id, status, title, meta };
+      });
+
+    return list;
+  }, [extensions]);
+
+  const hasNotificationDot = useMemo(() => {
+    return (extensions || []).some((ext) => String(ext.status || '') !== 'pending');
+  }, [extensions]);
 
   return (
     <div className="min-h-screen bg-surface text-slate-900 font-sans antialiased">
@@ -121,9 +180,80 @@ const StudentDashboard = () => {
           >
             <span className="material-symbols-outlined">calendar_month</span>
           </button>
-          <button className="w-10 h-10 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100" title="Notifications" type="button">
-            <span className="material-symbols-outlined">notifications</span>
-          </button>
+          <div className="relative">
+            <button
+              ref={notificationsButtonRef}
+              className="w-10 h-10 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 relative"
+              title="Notifications"
+              type="button"
+              onClick={async () => {
+                if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
+                  await enablePushNotifications().catch(() => {});
+                }
+                setIsNotificationsOpen((v) => !v);
+              }}
+            >
+              <span className="material-symbols-outlined">notifications</span>
+              {hasNotificationDot ? <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-red-500"></span> : null}
+            </button>
+
+            {isNotificationsOpen ? (
+              <div
+                ref={notificationsPanelRef}
+                className="absolute right-0 mt-2 w-[340px] max-w-[90vw] rounded-xl bg-white border border-slate-200 shadow-xl overflow-hidden z-50"
+              >
+                <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                  <div className="font-bold text-slate-800">Notifications</div>
+                  <button
+                    type="button"
+                    className="text-xs font-bold text-slate-500 hover:text-slate-700"
+                    onClick={() => setIsNotificationsOpen(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="max-h-[360px] overflow-y-auto hide-scrollbar">
+                  {notifications.length === 0 ? (
+                    <div className="px-4 py-6 text-sm text-slate-500 text-center">No notifications yet.</div>
+                  ) : (
+                    notifications.map((n) => (
+                      <button
+                        key={n.id}
+                        type="button"
+                        className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100 last:border-b-0"
+                        onClick={() => {
+                          setIsNotificationsOpen(false);
+                          const el = document.getElementById('student-extensions');
+                          if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                              n.status === 'approved'
+                                ? 'bg-green-100 text-green-700'
+                                : n.status === 'denied'
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-amber-100 text-amber-700'
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-[18px]">
+                              {n.status === 'approved' ? 'check_circle' : n.status === 'denied' ? 'cancel' : 'schedule'}
+                            </span>
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold text-slate-800 leading-tight">{n.title}</div>
+                            <div className="text-[11px] text-slate-500 mt-1">{n.meta}</div>
+                          </div>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
           <button
             className="w-9 h-9 rounded-full bg-slate-200 overflow-hidden border-2 border-white shadow-sm"
             onClick={() => navigate('/profile')}
@@ -265,7 +395,7 @@ const StudentDashboard = () => {
             <DueSoon />
           </div>
 
-          <div className="col-span-12 lg:col-span-8 bento-card flex flex-col">
+          <div id="student-extensions" className="col-span-12 lg:col-span-8 bento-card flex flex-col">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
                 <span className="material-symbols-outlined text-amber-500">history_edu</span>
@@ -311,7 +441,7 @@ const StudentDashboard = () => {
           </div>
 
           <div className="col-span-12 lg:col-span-4">
-            <ChatAssistant height="100%" className="h-full" />
+            <ChatAssistant height="560px" />
           </div>
         </div>
       </main>

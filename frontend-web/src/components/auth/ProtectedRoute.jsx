@@ -1,10 +1,9 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { auth } from '../../config/firebase';
 
 const ProtectedRoute = ({ children, requireRole = null }) => {
   const { currentUser, userRole, loading, needsRegistration } = useAuth();
-  const signedInUser = currentUser || auth.currentUser;
+  const signedInUser = currentUser;
 
   if (loading) {
     return (

@@ -1,6 +1,12 @@
 // Task Scheduling Agent V2 - Service Worker
 // Provides offline support and caching for PWA
 
+importScripts('https://www.gstatic.com/firebasejs/11.0.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/11.0.0/firebase-messaging-compat.js');
+
+let _firebaseInitialized = false;
+let _firebaseMessaging = null;
+
 const _CACHE_NAME = 'taskagent-v1';
 const STATIC_CACHE = 'taskagent-static-v1';
 const DYNAMIC_CACHE = 'taskagent-dynamic-v1';
@@ -145,6 +151,25 @@ self.addEventListener('message', (event) => {
         event.ports[0].postMessage({ success: true });
       });
   }
+
+  if (event.data && event.data.type === 'INIT_FIREBASE' && event.data.firebaseConfig && !_firebaseInitialized) {
+    try {
+      firebase.initializeApp(event.data.firebaseConfig);
+      _firebaseMessaging = firebase.messaging();
+      _firebaseMessaging.onBackgroundMessage((payload) => {
+        const title = payload?.notification?.title || 'Notification';
+        const body = payload?.notification?.body || '';
+        const url = payload?.data?.url || '/';
+        return self.registration.showNotification(title, {
+          body,
+          icon: '/icon-192x192.png',
+          badge: '/icon-192x192.png',
+          data: { url },
+        });
+      });
+      _firebaseInitialized = true;
+    } catch {}
+  }
 });
 
 // Background sync for offline submissions (future feature)
@@ -155,29 +180,17 @@ self.addEventListener('sync', (event) => {
   }
 });
 
-// Push notifications (future feature)
-self.addEventListener('push', (event) => {
-  if (event.data) {
-    const data = event.data.json();
-    const options = {
-      body: data.body,
-      icon: '/icon-192x192.png',
-      badge: '/icon-192x192.png',
-      vibrate: [100, 50, 100],
-      data: {
-        url: data.url || '/'
-      }
-    };
-    event.waitUntil(
-      self.registration.showNotification(data.title, options)
-    );
-  }
-});
-
 // Handle notification click
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const raw = event.notification?.data?.url || '/';
+  const url = new URL(raw, self.location.origin).toString();
   event.waitUntil(
-    clients.openWindow(event.notification.data.url)
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url === url && 'focus' in client) return client.focus();
+      }
+      if (clients.openWindow) return clients.openWindow(url);
+    })
   );
 });

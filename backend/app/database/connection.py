@@ -65,6 +65,7 @@ async def ensure_mongo_indexes() -> None:
     groups_collection = get_db()["groups"]
     ai_credits_collection = get_db()["ai_credits"]
     extensions_collection = get_db()["extensions"]
+    push_tokens_collection = get_db()["push_tokens"]
     try:
         await submissions_collection.drop_index("uniq_submissions_task_student")
     except Exception:
@@ -225,4 +226,14 @@ async def ensure_mongo_indexes() -> None:
     await extensions_collection.create_index(
         [("status", ASCENDING), ("created_at", ASCENDING)],
         name="idx_extensions_status_created",
+    )
+
+    await push_tokens_collection.create_index(
+        [("user_uid", ASCENDING), ("token", ASCENDING)],
+        unique=True,
+        name="uniq_push_tokens_user_token",
+    )
+    await push_tokens_collection.create_index(
+        [("user_uid", ASCENDING), ("updated_at", ASCENDING)],
+        name="idx_push_tokens_user_updated_at",
     )

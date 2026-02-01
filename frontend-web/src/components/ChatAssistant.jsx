@@ -5,9 +5,11 @@ const ChatAssistant = ({ height = 'auto', className = '' } = {}) => {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const [credits, setCredits] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const typingIntervalRef = useRef(null);
 
   const loadCredits = async () => {
     try {
@@ -23,9 +25,52 @@ const ChatAssistant = ({ height = 'auto', className = '' } = {}) => {
     // Ideally load history too, keeping it simple for now as per mockup focus
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (typingIntervalRef.current) {
+        clearInterval(typingIntervalRef.current);
+        typingIntervalRef.current = null;
+      }
+    };
+  }, []);
+
+  const typewriter = (text, messageId) => {
+    const safeText = `${text ?? ''}`;
+    if (!safeText) return Promise.resolve();
+
+    if (typingIntervalRef.current) {
+      clearInterval(typingIntervalRef.current);
+      typingIntervalRef.current = null;
+    }
+
+    const chunkSize = safeText.length > 600 ? 4 : safeText.length > 300 ? 2 : 1;
+    const delayMs = safeText.length > 600 ? 12 : 18;
+
+    let index = 0;
+    setIsTyping(true);
+
+    return new Promise((resolve) => {
+      typingIntervalRef.current = setInterval(() => {
+        index = Math.min(safeText.length, index + chunkSize);
+        const nextText = safeText.slice(0, index);
+
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, content: nextText } : m))
+        );
+
+        if (index >= safeText.length) {
+          clearInterval(typingIntervalRef.current);
+          typingIntervalRef.current = null;
+          setIsTyping(false);
+          resolve();
+        }
+      }, delayMs);
+    });
+  };
+
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!inputMessage.trim() || isSending) return;
+    if (!inputMessage.trim() || isSending || isTyping) return;
 
     const userMsg = { id: Date.now(), role: 'user', content: inputMessage.trim() };
     setMessages(prev => [...prev, userMsg]);
@@ -37,10 +82,11 @@ const ChatAssistant = ({ height = 'auto', className = '' } = {}) => {
       const aiMsg = { 
           id: Date.now() + 1, 
           role: 'assistant', 
-          content: response.response,
+          content: '',
           timestamp: response.timestamp 
       };
       setMessages(prev => [...prev, aiMsg]);
+      await typewriter(response.response, aiMsg.id);
       await loadCredits();
     } catch (err) {
       console.error(err);
@@ -57,6 +103,7 @@ const ChatAssistant = ({ height = 'auto', className = '' } = {}) => {
   const creditsRemaining = credits?.credits_remaining ?? 25;
   const creditsLimit = credits?.credits_limit ?? 25;
   const creditsPercentage = (creditsRemaining / creditsLimit) * 100;
+  const isBusy = isSending || isTyping;
 
   return (
     <div className={`w-full bento-card flex flex-col overflow-hidden ${className}`} style={{ height }}>
@@ -92,7 +139,7 @@ const ChatAssistant = ({ height = 'auto', className = '' } = {}) => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-6 space-y-4 hide-scrollbar">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-10">
             <div className="size-16 flex items-center justify-center bg-primary/10 rounded-full mb-3">
@@ -138,15 +185,15 @@ const ChatAssistant = ({ height = 'auto', className = '' } = {}) => {
             type="text"
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
-            disabled={isSending}
+            disabled={isBusy}
             maxLength={500}
           />
           <button
             type="submit"
-            disabled={!inputMessage.trim() || isSending}
+            disabled={!inputMessage.trim() || isBusy}
             className="px-4 py-2 bg-primary text-white rounded-lg font-bold text-sm hover:bg-primary/90 transition-colors disabled:opacity-60"
           >
-            {isSending ? '...' : 'Send'}
+            {isBusy ? '...' : 'Send'}
           </button>
         </div>
         <p className="text-[10px] text-slate-500 mt-2 text-right">{inputMessage.length}/500</p>

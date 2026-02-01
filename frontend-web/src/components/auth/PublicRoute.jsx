@@ -1,10 +1,9 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { auth } from '../../config/firebase';
 
 const PublicRoute = ({ children }) => {
   const { currentUser, userRole, loading, needsRegistration } = useAuth();
-  const signedInUser = currentUser || auth.currentUser;
+  const signedInUser = currentUser;
   const location = useLocation();
 
   if (loading) {

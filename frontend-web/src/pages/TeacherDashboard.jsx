@@ -3,12 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import aiService from '../services/aiService';
-import { logout } from '../services/authService';
+import { enablePushNotifications } from '../services/pushNotifications';
 import ChatAssistant from '../components/ChatAssistant';
 
 const TeacherDashboard = () => {
-  const { currentUser, backendUser } = useAuth();
+  const { currentUser, backendUser, logout } = useAuth();
   const navigate = useNavigate();
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationsButtonRef = useRef(null);
+  const notificationsPanelRef = useRef(null);
 
   // Data States
   const [subjects, setSubjects] = useState([]);
@@ -79,6 +82,29 @@ const TeacherDashboard = () => {
     if (extCount > 0) return `You have ${classesLabel} and ${extLabel} that need your immediate attention.`;
     return `You have ${classesLabel} and ${extLabel}.`;
   }, [subjects?.length, extensions?.length]);
+
+  useEffect(() => {
+    if (!isNotificationsOpen) return;
+
+    const onMouseDown = (e) => {
+      const btn = notificationsButtonRef.current;
+      const panel = notificationsPanelRef.current;
+      if (btn && btn.contains(e.target)) return;
+      if (panel && panel.contains(e.target)) return;
+      setIsNotificationsOpen(false);
+    };
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setIsNotificationsOpen(false);
+    };
+
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isNotificationsOpen]);
 
   // Helper: Format Dates
   const formatDue = (deadline) => {
@@ -220,6 +246,42 @@ const TeacherDashboard = () => {
     navigate('/login');
   };
 
+  const notifications = useMemo(() => {
+    const toTime = (value) => {
+      const t = new Date(value || 0).getTime();
+      return Number.isFinite(t) ? t : 0;
+    };
+
+    const upcoming = (upcomingTasks || [])
+      .slice()
+      .sort((a, b) => toTime(a.deadline) - toTime(b.deadline))
+      .slice(0, 5)
+      .map((t) => ({
+        id: `task-${t.task_id}`,
+        kind: 'task',
+        title: `Upcoming: ${t.title || 'Task'}`,
+        meta: t.subject_name ? `${t.subject_name}` : null,
+        taskId: t.task_id,
+      }));
+
+    const exts = (extensions || [])
+      .slice()
+      .sort((a, b) => toTime(b.created_at) - toTime(a.created_at))
+      .slice(0, 5)
+      .map((e) => ({
+        id: `ext-${e.id}`,
+        kind: 'extension',
+        title: `${e.student_name || 'Student'} requested extension`,
+        meta: e.task_title || 'Task',
+      }));
+
+    return { upcoming, exts };
+  }, [extensions, upcomingTasks]);
+
+  const hasNotificationDot = useMemo(() => {
+    return (extensions || []).length > 0 || (upcomingTasks || []).length > 0;
+  }, [extensions, upcomingTasks]);
+
   const handleCopyCode = async (subject) => {
     const value = subject?.join_code;
     if (!value) return;
@@ -334,13 +396,103 @@ const TeacherDashboard = () => {
             >
               <span className="material-symbols-outlined">calendar_month</span>
             </button>
-            <button
-              className="w-10 h-10 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100"
-              type="button"
-              title="Notifications"
-            >
-              <span className="material-symbols-outlined">notifications</span>
-            </button>
+            <div className="relative">
+              <button
+                ref={notificationsButtonRef}
+                className="w-10 h-10 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 relative"
+                type="button"
+                title="Notifications"
+                onClick={async () => {
+                  if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
+                    await enablePushNotifications().catch(() => {});
+                  }
+                  setIsNotificationsOpen((v) => !v);
+                }}
+              >
+                <span className="material-symbols-outlined">notifications</span>
+                {hasNotificationDot ? <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-red-500"></span> : null}
+              </button>
+
+              {isNotificationsOpen ? (
+                <div
+                  ref={notificationsPanelRef}
+                  className="absolute right-0 mt-2 w-[360px] max-w-[92vw] rounded-xl bg-white border border-slate-200 shadow-xl overflow-hidden z-50"
+                >
+                  <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                    <div className="font-bold text-slate-800">Notifications</div>
+                    <button
+                      type="button"
+                      className="text-xs font-bold text-slate-500 hover:text-slate-700"
+                      onClick={() => setIsNotificationsOpen(false)}
+                    >
+                      Close
+                    </button>
+                  </div>
+
+                  <div className="max-h-[380px] overflow-y-auto hide-scrollbar">
+                    <div className="px-4 pt-3 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Upcoming Tasks
+                    </div>
+                    {notifications.upcoming.length === 0 ? (
+                      <div className="px-4 pb-3 text-sm text-slate-500">No upcoming tasks.</div>
+                    ) : (
+                      notifications.upcoming.map((n) => (
+                        <button
+                          key={n.id}
+                          type="button"
+                          className="w-full text-left px-4 py-3 hover:bg-slate-50 border-t border-slate-100"
+                          onClick={() => {
+                            setIsNotificationsOpen(false);
+                            if (n.taskId) navigate(`/task/${n.taskId}`);
+                          }}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                              <span className="material-symbols-outlined text-[18px]">assignment</span>
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-slate-800 leading-tight">{n.title}</div>
+                              {n.meta ? <div className="text-[11px] text-slate-500 mt-1">{n.meta}</div> : null}
+                            </div>
+                          </div>
+                        </button>
+                      ))
+                    )}
+
+                    <div className="px-4 pt-4 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Extension Requests
+                    </div>
+                    {notifications.exts.length === 0 ? (
+                      <div className="px-4 pb-4 text-sm text-slate-500">No pending extensions.</div>
+                    ) : (
+                      notifications.exts.map((n) => (
+                        <button
+                          key={n.id}
+                          type="button"
+                          className="w-full text-left px-4 py-3 hover:bg-slate-50 border-t border-slate-100"
+                          onClick={() => {
+                            setIsNotificationsOpen(false);
+                            const el = document.getElementById('teacher-extensions');
+                            if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          }}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                              <span className="material-symbols-outlined text-[18px]">history_edu</span>
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-slate-800 leading-tight">{n.title}</div>
+                              {n.meta ? <div className="text-[11px] text-slate-500 mt-1">{n.meta}</div> : null}
+                            </div>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+
+                </div>
+              ) : null}
+            </div>
             <button 
               onClick={handleLogout}
               className="w-10 h-10 flex items-center justify-center rounded-full text-slate-500 hover:bg-slate-100"
@@ -652,7 +804,7 @@ const TeacherDashboard = () => {
           </div>
 
           {/* Extensions */}
-          <div className="col-span-12 lg:col-span-4 row-span-2 bento-card flex flex-col">
+          <div id="teacher-extensions" className="col-span-12 lg:col-span-4 row-span-2 bento-card flex flex-col">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center">
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
                 <span className="material-symbols-outlined text-amber-500">history_edu</span>
