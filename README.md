@@ -68,16 +68,20 @@ Task_Scheduling_Agent_V2/
 │   │   ├── ai/                # AI engine (scheduler, evaluator, grouping)
 │   │   ├── database/          # MongoDB connection & indexes
 │   │   └── utils/             # Helper functions
+│   ├── tests/                 # Unit and integration tests
+│   ├── uploads/               # File upload storage
 │   ├── Procfile               # Render deployment
 │   ├── render.yaml            # Render config
 │   └── requirements.txt       # Python dependencies
 │
-├── frontend-web/              # React + Vite Frontend
+├── frontend-web/              # React + Vite Frontend (PWA)
 │   ├── src/
 │   │   ├── components/        # Reusable React components
 │   │   ├── pages/             # Page-level components
 │   │   ├── services/          # API client services
-│   │   └── context/           # React Context (Auth, Theme)
+│   │   ├── context/           # React Context (Auth, Theme)
+│   │   ├── hooks/             # Custom React hooks
+│   │   └── utils/             # Utility functions
 │   ├── public/
 │   │   ├── manifest.json      # PWA manifest
 │   │   └── sw.js              # Service worker
@@ -89,13 +93,10 @@ Task_Scheduling_Agent_V2/
 │       ├── taskagent.service
 │       └── nginx.conf
 │
-├── docs/                      # Documentation
-│   ├── API.md                 # Complete API reference
-│   ├── DATABASE.md            # Database schema
-│   └── DEPLOYMENT.md          # Deployment guide
-│
-└── frontend-mobile/           # Flutter Mobile (Planned)
-    └── lib/
+└── docs/                      # Documentation
+    ├── API.md                 # Complete API reference
+    ├── DATABASE.md            # Database schema
+    └── DEPLOYMENT.md          # Deployment guide
 ```
 
 ---
@@ -408,7 +409,7 @@ This is an academic project. For suggestions or issues, please contact the autho
 ---
 
 **Version**: 2.0
-**Last Updated**: January 2026
+**Last Updated**: February 2026
 
 ---
 
