@@ -6,6 +6,7 @@ from uuid import uuid4
 import anyio
 import boto3
 from botocore.exceptions import ClientError
+import logging
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, StreamingResponse
@@ -21,6 +22,7 @@ from app.models.task import (
 from app.utils.dependencies import get_current_teacher, get_current_user
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 _CODE_EXTENSIONS = {".py", ".ipynb", ".js", ".java", ".c", ".cpp", ".txt"}
 _ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".zip", ".pptx", ".ppt", ".doc", ".docx", *_CODE_EXTENSIONS}
@@ -425,12 +427,14 @@ async def download_task_attachment(
             obj = await _get_s3_object(key)
         except ClientError as exc:
             code = str(exc.response.get("Error", {}).get("Code") or "")
+            logger.error("S3 get_object failed: code=%s bucket=%s key=%s", code, settings.s3_bucket, key)
             if code in {"NoSuchKey", "NotFound"}:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
             if code in {"AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch"}:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Attachment access denied")
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Attachment download failed")
         except Exception:
+            logger.exception("S3 get_object failed: bucket=%s key=%s", settings.s3_bucket, key)
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Attachment download failed")
 
         filename = _safe_filename(attachment.get("filename") or "attachment")
