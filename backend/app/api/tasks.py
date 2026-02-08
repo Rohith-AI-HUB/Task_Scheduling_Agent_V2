@@ -1,5 +1,6 @@
 from datetime import datetime
 from functools import lru_cache
+from functools import partial
 from pathlib import Path
 from uuid import uuid4
 
@@ -209,12 +210,16 @@ def _presigned_get_url(key: str) -> str:
 
 async def _get_s3_object(key: str) -> dict:
     client = _s3_client()
-    return await anyio.to_thread.run_sync(client.get_object, Bucket=settings.s3_bucket, Key=key)
+    return await anyio.to_thread.run_sync(
+        partial(client.get_object, Bucket=settings.s3_bucket, Key=key)
+    )
 
 
 async def _delete_s3_object(key: str) -> None:
     client = _s3_client()
-    await anyio.to_thread.run_sync(client.delete_object, Bucket=settings.s3_bucket, Key=key)
+    await anyio.to_thread.run_sync(
+        partial(client.delete_object, Bucket=settings.s3_bucket, Key=key)
+    )
 
 
 @router.post("", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
