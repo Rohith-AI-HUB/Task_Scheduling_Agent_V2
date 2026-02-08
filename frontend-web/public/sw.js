@@ -65,6 +65,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Skip cross-origin requests
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
   // Skip API requests - always go to network
   if (url.origin === self.location.origin && API_ROUTES.some(route => url.pathname.startsWith(route))) {
     event.respondWith(
