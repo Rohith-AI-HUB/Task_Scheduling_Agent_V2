@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import anyio
 import boto3
+from botocore.exceptions import ClientError
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, StreamingResponse
@@ -420,11 +421,25 @@ async def download_task_attachment(
         key = attachment.get("key")
         if not key:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
-        obj = await _get_s3_object(key)
+        try:
+            obj = await _get_s3_object(key)
+        except ClientError as exc:
+            code = str(exc.response.get("Error", {}).get("Code") or "")
+            if code in {"NoSuchKey", "NotFound"}:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
+            if code in {"AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch"}:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Attachment access denied")
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Attachment download failed")
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Attachment download failed")
+
         filename = _safe_filename(attachment.get("filename") or "attachment")
         content_type = obj.get("ContentType") or attachment.get("content_type") or "application/octet-stream"
+        body = obj.get("Body")
+        if body is None:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Attachment download failed")
         headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
-        return StreamingResponse(obj["Body"], media_type=content_type, headers=headers)
+        return StreamingResponse(body, media_type=content_type, headers=headers)
 
     path = attachment.get("path")
     if not path:
