@@ -305,6 +305,26 @@ const TaskView = () => {
     }
   };
 
+  const downloadTaskAttachment = async (attachment) => {
+    if (!task?.id) return;
+    try {
+      const response = await api.get(`/tasks/${task.id}/attachments/${attachment.id}`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: attachment.content_type || 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = attachment.filename || 'attachment';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to download attachment'));
+    }
+  };
+
   const downloadSummary = async (submissionId) => {
     try {
       const response = await api.get(`/submissions/${submissionId}/summary`, {
@@ -650,6 +670,31 @@ const TaskView = () => {
                     <p className="text-[#4b3d75] dark:text-[#c0bad3] leading-relaxed whitespace-pre-wrap">
                       {task.description || 'No description.'}
                     </p>
+                  </div>
+                </section>
+                <section className="mb-10">
+                  <div className="flex items-center gap-2 mb-4 px-1">
+                    <span className="material-symbols-outlined text-primary">attach_file</span>
+                    <h3 className="text-xl font-bold text-[#110d1c] dark:text-white">Task Documents</h3>
+                  </div>
+                  <div className="bg-white dark:bg-[#1c162e] p-6 rounded-xl border border-[#eae6f4] dark:border-[#2a2438]">
+                    {Array.isArray(task.attachments) && task.attachments.length > 0 ? (
+                      <div className="flex flex-wrap gap-3">
+                        {task.attachments.map((attachment) => (
+                          <button
+                            key={attachment.id}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#eae6f4] dark:border-[#2a2438] text-sm font-semibold text-[#110d1c] dark:text-white hover:border-primary/40 transition-colors"
+                            onClick={() => downloadTaskAttachment(attachment)}
+                            type="button"
+                          >
+                            <span className="material-symbols-outlined text-base">download</span>
+                            <span className="max-w-[220px] truncate">{attachment.filename || 'Attachment'}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-[#4b3d75] dark:text-[#c0bad3]">No documents.</div>
+                    )}
                   </div>
                 </section>
 
@@ -1530,6 +1575,32 @@ const TaskView = () => {
                         <div className="max-w-none text-gray-700 dark:text-gray-300 space-y-4 whitespace-pre-wrap">
                           {task.description || 'No description.'}
                         </div>
+                      </div>
+                    </div>
+                    <div className="bg-white dark:bg-background-dark border border-[#d5cee9] dark:border-white/10 rounded-xl overflow-hidden mb-8 shadow-sm">
+                      <div className="px-6 py-5 border-b border-[#d5cee9] dark:border-white/10 bg-gray-50/50 dark:bg-white/5">
+                        <h2 className="text-[#110d1c] dark:text-white text-xl font-bold leading-tight tracking-tight">
+                          Task Documents
+                        </h2>
+                      </div>
+                      <div className="p-6">
+                        {Array.isArray(task.attachments) && task.attachments.length > 0 ? (
+                          <div className="flex flex-wrap gap-3">
+                            {task.attachments.map((attachment) => (
+                              <button
+                                key={attachment.id}
+                                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#eae6f4] dark:border-[#2a2438] text-sm font-semibold text-[#110d1c] dark:text-white hover:border-primary/40 transition-colors"
+                                onClick={() => downloadTaskAttachment(attachment)}
+                                type="button"
+                              >
+                                <span className="material-symbols-outlined text-base">download</span>
+                                <span className="max-w-[220px] truncate">{attachment.filename || 'Attachment'}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-gray-600 dark:text-gray-400">No documents.</div>
+                        )}
                       </div>
                     </div>
 

@@ -1,9 +1,16 @@
 from datetime import datetime
+from functools import lru_cache
+from pathlib import Path
+from uuid import uuid4
 
+import anyio
+import boto3
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse, RedirectResponse
 
 from app.database.collections import get_collection
+from app.config import settings
 from app.models.task import (
     TaskCreateRequest,
     TaskEvaluationsSummaryResponse,
@@ -14,8 +21,40 @@ from app.utils.dependencies import get_current_teacher, get_current_user
 
 router = APIRouter()
 
+_CODE_EXTENSIONS = {".py", ".ipynb", ".js", ".java", ".c", ".cpp", ".txt"}
+_ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".zip", ".pptx", ".ppt", ".doc", ".docx", *_CODE_EXTENSIONS}
+_ALLOWED_CONTENT_TYPES = {
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "application/zip",
+    "application/x-zip-compressed",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword",
+    "text/plain",
+    "application/javascript",
+    "text/javascript",
+    "application/octet-stream",
+    "application/x-ipynb+json",
+}
+
 
 def _serialize_task(doc: dict) -> TaskResponse:
+    attachments = []
+    for att in doc.get("attachments") or []:
+        if isinstance(att, dict):
+            uploaded_at = att.get("uploaded_at") or doc.get("created_at") or datetime.utcnow()
+            attachments.append(
+                {
+                    "id": str(att.get("id") or ""),
+                    "filename": att.get("filename") or "attachment",
+                    "content_type": att.get("content_type"),
+                    "size": att.get("size"),
+                    "uploaded_at": uploaded_at,
+                }
+            )
     return TaskResponse(
         id=str(doc["_id"]),
         subject_id=str(doc["subject_id"]),
@@ -28,6 +67,7 @@ def _serialize_task(doc: dict) -> TaskResponse:
         problem_statements=list(doc.get("problem_statements") or []),
         group_settings=doc.get("group_settings"),
         evaluation_config=doc.get("evaluation_config"),
+        attachments=attachments,
         created_at=doc["created_at"],
         updated_at=doc["updated_at"],
     )
@@ -62,6 +102,113 @@ async def _ensure_student_enrolled(student_uid: str, subject_oid: ObjectId) -> N
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
 
+def _uploads_root() -> Path:
+    root = Path(settings.uploads_dir)
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _safe_filename(name: str) -> str:
+    value = (name or "").strip()
+    base = Path(value).name
+    if not base:
+        return "file"
+    return base.replace("\x00", "")
+
+
+def _validate_file(file: UploadFile) -> None:
+    filename = _safe_filename(file.filename or "")
+    ext = Path(filename).suffix.lower()
+    if ext not in _ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File type not allowed")
+    if file.content_type:
+        ct = str(file.content_type).lower()
+        if ext in _CODE_EXTENSIONS:
+            if not (ct.startswith("text/") or ct in {"application/octet-stream", "application/javascript"}):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File type not allowed")
+        else:
+            if ct not in _ALLOWED_CONTENT_TYPES:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File type not allowed")
+
+
+async def _save_upload(file: UploadFile, dest_path: Path) -> int:
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    size = 0
+    with dest_path.open("wb") as out:
+        while True:
+            chunk = await file.read(1024 * 1024)
+            if not chunk:
+                break
+            size += len(chunk)
+            if size > settings.max_upload_bytes:
+                raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large")
+            out.write(chunk)
+    return size
+
+
+def _s3_enabled() -> bool:
+    return bool(
+        settings.s3_bucket
+        and settings.s3_access_key_id
+        and settings.s3_secret_access_key
+    )
+
+
+@lru_cache(maxsize=1)
+def _s3_client():
+    return boto3.client(
+        "s3",
+        endpoint_url=settings.s3_endpoint_url or None,
+        region_name=settings.s3_region or None,
+        aws_access_key_id=settings.s3_access_key_id,
+        aws_secret_access_key=settings.s3_secret_access_key,
+    )
+
+
+def _s3_key(task_id: str, attachment_id: str, filename: str) -> str:
+    safe_name = _safe_filename(filename)
+    return f"tasks/{task_id}/{attachment_id}_{safe_name}"
+
+
+def _file_size_sync(file: UploadFile) -> int:
+    file.file.seek(0, 2)
+    size = file.file.tell()
+    file.file.seek(0)
+    return int(size)
+
+
+async def _get_file_size(file: UploadFile) -> int:
+    return await anyio.to_thread.run_sync(_file_size_sync, file)
+
+
+async def _upload_to_s3(file: UploadFile, key: str) -> None:
+    client = _s3_client()
+    await anyio.to_thread.run_sync(file.file.seek, 0)
+
+    def _do_upload():
+        extra = {"ContentType": file.content_type} if file.content_type else None
+        if extra:
+            client.upload_fileobj(file.file, settings.s3_bucket, key, ExtraArgs=extra)
+        else:
+            client.upload_fileobj(file.file, settings.s3_bucket, key)
+
+    await anyio.to_thread.run_sync(_do_upload)
+
+
+def _presigned_get_url(key: str) -> str:
+    client = _s3_client()
+    return client.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": settings.s3_bucket, "Key": key},
+        ExpiresIn=settings.s3_presign_expires_seconds,
+    )
+
+
+async def _delete_s3_object(key: str) -> None:
+    client = _s3_client()
+    await anyio.to_thread.run_sync(client.delete_object, Bucket=settings.s3_bucket, Key=key)
+
+
 @router.post("", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
 async def create_task(
     request: TaskCreateRequest,
@@ -88,6 +235,7 @@ async def create_task(
         "problem_statements": normalized_problem_statements if request.type == "group" else [],
         "group_settings": request.group_settings.model_dump() if request.type == "group" and request.group_settings else None,
         "evaluation_config": request.evaluation_config.model_dump() if request.evaluation_config else None,
+        "attachments": [],
         "created_at": now,
         "updated_at": now,
     }
@@ -168,6 +316,159 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
 
     await _ensure_student_enrolled(current_user["uid"], subject_oid)
     return _serialize_task(task)
+
+
+@router.post("/{task_id}/attachments", response_model=TaskResponse)
+async def upload_task_attachments(
+    task_id: str,
+    files: list[UploadFile] = File(...),
+    current_teacher: dict = Depends(get_current_teacher),
+):
+    if not files:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No files uploaded")
+    task = await _find_task_or_404(task_id)
+    subject_oid = task["subject_id"]
+    await _ensure_teacher_owns_subject(current_teacher["uid"], subject_oid)
+
+    attachments_to_add: list[dict] = []
+    saved_paths: list[Path] = []
+    now = datetime.utcnow()
+    root = _uploads_root() / "tasks" / str(task["_id"])
+
+    try:
+        for file in files:
+            _validate_file(file)
+            attachment_id = str(uuid4())
+            filename = _safe_filename(file.filename or "file")
+            if _s3_enabled():
+                size = await _get_file_size(file)
+                if size > settings.max_upload_bytes:
+                    raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large")
+                key = _s3_key(str(task["_id"]), attachment_id, filename)
+                await _upload_to_s3(file, key)
+                attachments_to_add.append(
+                    {
+                        "id": attachment_id,
+                        "filename": filename,
+                        "content_type": file.content_type or "application/octet-stream",
+                        "size": size,
+                        "uploaded_at": now,
+                        "storage": "s3",
+                        "key": key,
+                        "bucket": settings.s3_bucket,
+                    }
+                )
+            else:
+                dest = root / f"{attachment_id}_{filename}"
+                size = await _save_upload(file, dest)
+                saved_paths.append(dest)
+                attachments_to_add.append(
+                    {
+                        "id": attachment_id,
+                        "filename": filename,
+                        "content_type": file.content_type or "application/octet-stream",
+                        "size": size,
+                        "uploaded_at": now,
+                        "storage": "local",
+                        "path": str(dest),
+                    }
+                )
+    except HTTPException:
+        for p in saved_paths:
+            try:
+                p.unlink(missing_ok=True)
+            except Exception:
+                pass
+        raise
+
+    tasks_collection = get_collection("tasks")
+    await tasks_collection.update_one(
+        {"_id": task["_id"]},
+        {"$push": {"attachments": {"$each": attachments_to_add}}, "$set": {"updated_at": now}},
+    )
+    updated = await tasks_collection.find_one({"_id": task["_id"]})
+    return _serialize_task(updated)
+
+
+@router.get("/{task_id}/attachments/{attachment_id}")
+async def download_task_attachment(
+    task_id: str,
+    attachment_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    task = await _find_task_or_404(task_id)
+    subject_oid = task["subject_id"]
+    if current_user.get("role") == "teacher":
+        await _ensure_teacher_owns_subject(current_user["uid"], subject_oid)
+    else:
+        await _ensure_student_enrolled(current_user["uid"], subject_oid)
+
+    attachment = None
+    for a in task.get("attachments") or []:
+        if isinstance(a, dict) and a.get("id") == attachment_id:
+            attachment = a
+            break
+    if not attachment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
+
+    if attachment.get("storage") == "s3":
+        key = attachment.get("key")
+        if not key:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
+        return RedirectResponse(_presigned_get_url(key))
+
+    path = attachment.get("path")
+    if not path:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
+    file_path = Path(path)
+    if not file_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
+
+    return FileResponse(
+        path=str(file_path),
+        media_type=attachment.get("content_type") or "application/octet-stream",
+        filename=attachment.get("filename") or "attachment",
+    )
+
+
+@router.delete("/{task_id}/attachments/{attachment_id}", response_model=TaskResponse)
+async def delete_task_attachment(
+    task_id: str,
+    attachment_id: str,
+    current_teacher: dict = Depends(get_current_teacher),
+):
+    task = await _find_task_or_404(task_id)
+    subject_oid = task["subject_id"]
+    await _ensure_teacher_owns_subject(current_teacher["uid"], subject_oid)
+
+    target = None
+    for a in task.get("attachments") or []:
+        if isinstance(a, dict) and a.get("id") == attachment_id:
+            target = a
+            break
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
+
+    if target.get("storage") == "s3":
+        key = target.get("key")
+        if key:
+            await _delete_s3_object(key)
+    else:
+        path = target.get("path")
+        if path:
+            try:
+                Path(path).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+    tasks_collection = get_collection("tasks")
+    now = datetime.utcnow()
+    await tasks_collection.update_one(
+        {"_id": task["_id"]},
+        {"$pull": {"attachments": {"id": attachment_id}}, "$set": {"updated_at": now}},
+    )
+    updated = await tasks_collection.find_one({"_id": task["_id"]})
+    return _serialize_task(updated)
 
 
 @router.put("/{task_id}", response_model=TaskResponse)

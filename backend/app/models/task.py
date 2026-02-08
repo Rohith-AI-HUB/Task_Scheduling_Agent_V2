@@ -69,6 +69,14 @@ class TaskEvaluationConfig(BaseModel):
     quiz: Optional[QuizEvaluationConfig] = None
 
 
+class TaskAttachment(BaseModel):
+    id: str
+    filename: str
+    content_type: Optional[str] = None
+    size: Optional[int] = None
+    uploaded_at: datetime
+
+
 class TaskCreateRequest(BaseModel):
     subject_id: str
     title: str = Field(min_length=1, max_length=200)
@@ -106,6 +114,7 @@ class TaskResponse(BaseModel):
     problem_statements: list[str] = Field(default_factory=list)
     group_settings: Optional[TaskGroupSettings] = None
     evaluation_config: Optional[TaskEvaluationConfig] = None
+    attachments: list[TaskAttachment] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 

@@ -26,6 +26,7 @@ const SubjectView = () => {
   const [groupSize, setGroupSize] = useState('3');
   const [problemStatements, setProblemStatements] = useState(['']);
   const [bulkProblems, setBulkProblems] = useState('');
+  const [taskAttachments, setTaskAttachments] = useState([]);
   const [previewNonce, setPreviewNonce] = useState(0);
   const [taskCreateError, setTaskCreateError] = useState('');
   const [taskCreating, setTaskCreating] = useState(false);
@@ -54,6 +55,7 @@ const SubjectView = () => {
   const [quizShuffleQuestions, setQuizShuffleQuestions] = useState(true);
   const [quizShuffleOptions, setQuizShuffleOptions] = useState(true);
   const [quizEnableAntiCheating, setQuizEnableAntiCheating] = useState(true);
+  const createTaskFileInputRef = useRef(null);
 
   const getErrorMessage = (err, fallback) => {
     const detail = err?.response?.data?.detail;
@@ -74,6 +76,13 @@ const SubjectView = () => {
     if (u.startsWith('http://') || u.startsWith('https://')) return u;
     const root = String(api?.defaults?.baseURL || '').replace(/\/api\/?$/, '');
     return `${root}${u}`;
+  };
+
+  const addTaskAttachments = (files) => {
+    if (!files || files.length === 0) return;
+    const list = Array.from(files);
+    setTaskAttachments((prev) => [...prev, ...list]);
+    setTaskCreateError('');
   };
 
   const makeGradientStyle = (seed) => {
@@ -1368,6 +1377,62 @@ const SubjectView = () => {
                     disabled={taskCreating}
                   ></textarea>
                 </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                    Task Documents
+                  </label>
+                  <div className="border border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4 bg-white dark:bg-gray-800">
+                    <div className="flex items-center justify-between gap-4 flex-wrap">
+                      <div>
+                        <div className="text-sm font-semibold text-gray-700 dark:text-gray-200">Attach resources</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          PDF, DOCX, PPTX, JPG, PNG, ZIP, TXT, PY, IPYNB, JS, JAVA, C, CPP (Max 25MB)
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <input
+                          ref={createTaskFileInputRef}
+                          type="file"
+                          multiple
+                          className="hidden"
+                          accept=".pdf,.jpg,.jpeg,.png,.zip,.docx,.pptx,.doc,.ppt,.txt,.py,.ipynb,.js,.java,.c,.cpp,application/pdf,image/jpeg,image/png,application/zip,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/msword,application/vnd.ms-powerpoint,text/plain,application/javascript,text/javascript,application/octet-stream,application/x-ipynb+json"
+                          onChange={(e) => addTaskAttachments(e.target.files)}
+                          disabled={taskCreating}
+                        />
+                        <button
+                          className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all disabled:opacity-60"
+                          onClick={() => createTaskFileInputRef.current?.click()}
+                          disabled={taskCreating}
+                          type="button"
+                        >
+                          Browse Files
+                        </button>
+                      </div>
+                    </div>
+                    {taskAttachments.length > 0 ? (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {taskAttachments.map((file, idx) => (
+                          <div
+                            key={`${file.name}-${file.size}-${idx}`}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 dark:bg-gray-700 text-xs text-gray-700 dark:text-gray-200"
+                          >
+                            <span className="max-w-[180px] truncate">{file.name}</span>
+                            <button
+                              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                              type="button"
+                              onClick={() => {
+                                setTaskAttachments((prev) => prev.filter((_, i) => i !== idx));
+                              }}
+                              disabled={taskCreating}
+                            >
+                              <span className="material-symbols-outlined text-sm">close</span>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
 
                 {taskKind === 'group' ? (
                   <div className="md:col-span-2 space-y-3">
@@ -1566,7 +1631,18 @@ const SubjectView = () => {
                       };
                     }
                     const response = await api.post('/tasks', payload);
-                    setTasks((prev) => [response.data, ...prev]);
+                    let createdTask = response.data;
+                    if (taskAttachments.length > 0) {
+                      const formData = new FormData();
+                      taskAttachments.forEach((file) => formData.append('files', file));
+                      try {
+                        const uploadResponse = await api.post(`/tasks/${createdTask.id}/attachments`, formData);
+                        createdTask = uploadResponse.data;
+                      } catch (err) {
+                        setTaskCreateError(getErrorMessage(err, 'Task created, but document upload failed'));
+                      }
+                    }
+                    setTasks((prev) => [createdTask, ...prev]);
                     setTaskTitle('');
                     setTaskDescription('');
                     setTaskDeadline('');
@@ -1576,6 +1652,10 @@ const SubjectView = () => {
                     setGroupSize('3');
                     setProblemStatements(['']);
                     setBulkProblems('');
+                    setTaskAttachments([]);
+                    if (createTaskFileInputRef.current) {
+                      createTaskFileInputRef.current.value = '';
+                    }
                     setPreviewNonce(0);
                     setQuizQuestions([]);
                     setQuizTimeLimit('30');

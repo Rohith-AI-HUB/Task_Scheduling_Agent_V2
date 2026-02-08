@@ -1,4 +1,3 @@
-from contextlib import asynccontextmanager
 import logging
 import os
 
@@ -19,11 +18,8 @@ def _parse_origins(value: str) -> list[str]:
     return [origin.strip() for origin in value.split(",") if origin.strip()]
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Initialize Firebase Admin SDK
+async def _on_startup() -> None:
     initialize_firebase()
-    # Connect to MongoDB
     mongo_required = settings.mongodb_required
     if os.getenv("MONGODB_REQUIRED") is None and settings.debug:
         mongo_required = False
@@ -35,12 +31,15 @@ async def lifespan(app: FastAPI):
         if mongo_required:
             raise
         logger.error("MongoDB initialization failed: %s", exc)
-    yield
-    # Cleanup
+
+
+async def _on_shutdown() -> None:
     await close_mongo_connection()
 
 
-app = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
+app = FastAPI(title=settings.app_name, debug=settings.debug)
+app.add_event_handler("startup", _on_startup)
+app.add_event_handler("shutdown", _on_shutdown)
 
 Path(settings.uploads_dir).mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.uploads_dir), name="uploads")

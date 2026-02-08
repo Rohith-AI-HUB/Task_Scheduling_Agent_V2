@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     uploads_dir: str = Field(default="uploads", alias="UPLOADS_DIR")
     max_upload_bytes: int = Field(default=25 * 1024 * 1024, alias="MAX_UPLOAD_BYTES")
 
+    # S3 / Object Storage
+    s3_endpoint_url: Optional[str] = Field(default=None, alias="S3_ENDPOINT_URL")
+    s3_region: Optional[str] = Field(default=None, alias="S3_REGION")
+    s3_bucket: Optional[str] = Field(default=None, alias="S3_BUCKET")
+    s3_access_key_id: Optional[str] = Field(default=None, alias="S3_ACCESS_KEY_ID")
+    s3_secret_access_key: Optional[str] = Field(default=None, alias="S3_SECRET_ACCESS_KEY")
+    s3_presign_expires_seconds: int = Field(default=3600, alias="S3_PRESIGN_EXPIRES_SECONDS")
+
     # Firebase Configuration
     firebase_credentials_path: Optional[str] = Field(
         default="./firebase-credentials.json", alias="FIREBASE_CREDENTIALS_PATH"
