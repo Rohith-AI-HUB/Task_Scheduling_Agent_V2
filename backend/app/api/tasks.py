@@ -7,7 +7,7 @@ import anyio
 import boto3
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from app.database.collections import get_collection
 from app.config import settings
@@ -202,6 +202,11 @@ def _presigned_get_url(key: str) -> str:
         Params={"Bucket": settings.s3_bucket, "Key": key},
         ExpiresIn=settings.s3_presign_expires_seconds,
     )
+
+
+async def _get_s3_object(key: str) -> dict:
+    client = _s3_client()
+    return await anyio.to_thread.run_sync(client.get_object, Bucket=settings.s3_bucket, Key=key)
 
 
 async def _delete_s3_object(key: str) -> None:
@@ -415,7 +420,11 @@ async def download_task_attachment(
         key = attachment.get("key")
         if not key:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
-        return RedirectResponse(_presigned_get_url(key))
+        obj = await _get_s3_object(key)
+        filename = _safe_filename(attachment.get("filename") or "attachment")
+        content_type = obj.get("ContentType") or attachment.get("content_type") or "application/octet-stream"
+        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        return StreamingResponse(obj["Body"], media_type=content_type, headers=headers)
 
     path = attachment.get("path")
     if not path:
