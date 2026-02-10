@@ -70,13 +70,14 @@ class ExtensionService:
                 continue
 
             points = task.get("points", 0)
-            total_points += points
+            safe_points = points if isinstance(points, (int, float)) else 0
+            total_points += safe_points
 
             task_info = {
                 "task_id": task_id,
                 "title": task.get("title", ""),
                 "deadline": deadline.isoformat() if isinstance(deadline, datetime) else str(deadline),
-                "points": points
+                "points": safe_points
             }
 
             if deadline < now:
