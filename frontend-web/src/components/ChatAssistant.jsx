@@ -106,10 +106,10 @@ const ChatAssistant = ({ height = 'auto', className = '' } = {}) => {
   const isBusy = isSending || isTyping;
 
   return (
-    <div className={`w-full bento-card flex flex-col overflow-hidden ${className}`} style={{ height }}>
-      <div className="px-6 py-4 bg-gradient-to-r from-primary/5 to-primary/10 border-b border-slate-100 flex items-center justify-between gap-3">
+    <div className={`w-full bento-card flex flex-col overflow-hidden bg-white ${className}`} style={{ height }}>
+      <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="size-10 flex items-center justify-center bg-primary rounded-lg shadow-sm">
+          <div className="size-10 flex items-center justify-center bg-primary rounded-xl shadow-sm">
             <span className="material-symbols-outlined text-white text-[20px]">smart_toy</span>
           </div>
           <div className="min-w-0">
@@ -118,7 +118,7 @@ const ChatAssistant = ({ height = 'auto', className = '' } = {}) => {
           </div>
         </div>
         <button
-          className="size-9 flex items-center justify-center rounded-lg hover:bg-white/60 text-slate-500"
+          className="size-9 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500"
           onClick={() => setMessages([])}
           title="Clear history"
           type="button"
@@ -127,19 +127,19 @@ const ChatAssistant = ({ height = 'auto', className = '' } = {}) => {
         </button>
       </div>
 
-      <div className="px-6 py-4 border-b border-slate-100">
+      <div className="px-5 py-4 border-b border-slate-100">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-slate-600">Messages Today</span>
           <span className="text-xs font-bold text-primary">
             {creditsRemaining}/{creditsLimit}
           </span>
         </div>
-        <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden mt-2">
+        <div className="w-full bg-slate-200/80 h-2 rounded-full overflow-hidden mt-2">
           <div className="h-full bg-primary transition-all" style={{ width: `${Math.min(100, Math.max(0, creditsPercentage))}%` }}></div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-4 hide-scrollbar">
+      <div className="flex-1 overflow-y-auto p-5 space-y-4 hide-scrollbar bg-slate-50/50">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-10">
             <div className="size-16 flex items-center justify-center bg-primary/10 rounded-full mb-3">
@@ -154,19 +154,21 @@ const ChatAssistant = ({ height = 'auto', className = '' } = {}) => {
           messages.map((msg) => (
             <div key={msg.id} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               {msg.role !== 'user' ? (
-                <div className="size-8 shrink-0 flex items-center justify-center bg-primary/10 rounded-lg">
+                <div className="size-8 shrink-0 flex items-center justify-center bg-primary/10 rounded-full">
                   <span className="material-symbols-outlined text-primary text-[16px]">smart_toy</span>
                 </div>
               ) : null}
               <div
-                className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                  msg.role === 'user' ? 'bg-primary text-white' : 'bg-slate-100 text-slate-800'
+                className={`max-w-[78%] px-4 py-2 text-sm leading-relaxed ${
+                  msg.role === 'user'
+                    ? 'bg-primary text-white rounded-2xl rounded-br-md shadow-sm'
+                    : 'bg-white text-slate-800 border border-slate-200 rounded-2xl rounded-bl-md shadow-sm'
                 }`}
               >
                 <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
               </div>
               {msg.role === 'user' ? (
-                <div className="size-8 shrink-0 flex items-center justify-center bg-primary rounded-lg">
+                <div className="size-8 shrink-0 flex items-center justify-center bg-primary rounded-full shadow-sm">
                   <span className="material-symbols-outlined text-white text-[16px]">person</span>
                 </div>
               ) : null}
