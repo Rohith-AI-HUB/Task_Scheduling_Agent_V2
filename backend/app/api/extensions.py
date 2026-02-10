@@ -146,7 +146,15 @@ async def get_extension_request(
     # Verify access
     if current_user["role"] == "student":
         if extension.student_uid != current_user["uid"]:
-            raise HTTPException(status_code=403, detail="Not authorized to view this extension")
+            group_id = extension.group_id
+            if group_id and ObjectId.is_valid(group_id):
+                group = await get_db().groups.find_one(
+                    {"_id": ObjectId(group_id), "member_uids": current_user["uid"]}
+                )
+                if not group:
+                    raise HTTPException(status_code=403, detail="Not authorized to view this extension")
+            else:
+                raise HTTPException(status_code=403, detail="Not authorized to view this extension")
     elif current_user["role"] == "teacher":
         # Verify teacher owns the subject (checked in service layer, but double-check)
         db = get_db()
@@ -181,12 +189,19 @@ async def approve_extension_request(
             approved_deadline=review_data.approved_deadline
         )
         try:
-            await send_push_to_user(
-                extension.student_uid,
-                "Extension approved",
-                f'Your extension request for {extension.task_title or "a task"} was approved.',
-                "/student/dashboard",
-            )
+            target_uids = [extension.student_uid]
+            if extension.group_id and ObjectId.is_valid(extension.group_id):
+                db = get_db()
+                group = await db.groups.find_one({"_id": ObjectId(extension.group_id)})
+                if group and isinstance(group.get("member_uids"), list):
+                    target_uids = [uid for uid in group["member_uids"] if isinstance(uid, str) and uid]
+            for uid in target_uids:
+                await send_push_to_user(
+                    uid,
+                    "Extension approved",
+                    f'Your extension request for {extension.task_title or "a task"} was approved.',
+                    "/student/dashboard",
+                )
         except Exception:
             pass
 
@@ -223,12 +238,19 @@ async def deny_extension_request(
             response=review_data.response
         )
         try:
-            await send_push_to_user(
-                extension.student_uid,
-                "Extension denied",
-                f'Your extension request for {extension.task_title or "a task"} was denied.',
-                "/student/dashboard",
-            )
+            target_uids = [extension.student_uid]
+            if extension.group_id and ObjectId.is_valid(extension.group_id):
+                db = get_db()
+                group = await db.groups.find_one({"_id": ObjectId(extension.group_id)})
+                if group and isinstance(group.get("member_uids"), list):
+                    target_uids = [uid for uid in group["member_uids"] if isinstance(uid, str) and uid]
+            for uid in target_uids:
+                await send_push_to_user(
+                    uid,
+                    "Extension denied",
+                    f'Your extension request for {extension.task_title or "a task"} was denied.',
+                    "/student/dashboard",
+                )
         except Exception:
             pass
 

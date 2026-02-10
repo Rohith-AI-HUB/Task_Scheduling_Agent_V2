@@ -30,6 +30,7 @@ class ExtensionService:
         self.submissions_collection = db.submissions
         self.subjects_collection = db.subjects
         self.users_collection = db.users
+        self.groups_collection = db.groups
 
     async def get_workload_snapshot(self, student_uid: str) -> WorkloadSnapshot:
         """
@@ -142,12 +143,38 @@ class ExtensionService:
         if not enrollment:
             raise ValueError("Student not enrolled in this subject")
 
+        task_kind = str(task.get("type") or "individual")
+        group_id = None
+
+        if task_kind == "group":
+            if request_data.group_id and ObjectId.is_valid(request_data.group_id):
+                group = await self.groups_collection.find_one({
+                    "_id": ObjectId(request_data.group_id),
+                    "task_id": task["_id"],
+                    "member_uids": student_uid
+                })
+            else:
+                group = await self.groups_collection.find_one({
+                    "task_id": task["_id"],
+                    "member_uids": student_uid
+                })
+            if not group:
+                raise ValueError("Student is not assigned to a group for this task")
+            group_id = str(group["_id"])
+
         # Check if extension already requested for this task
-        existing = await self.collection.find_one({
-            "student_uid": student_uid,
-            "task_id": request_data.task_id,
-            "status": "pending"
-        })
+        if group_id:
+            existing = await self.collection.find_one({
+                "group_id": group_id,
+                "task_id": request_data.task_id,
+                "status": "pending"
+            })
+        else:
+            existing = await self.collection.find_one({
+                "student_uid": student_uid,
+                "task_id": request_data.task_id,
+                "status": "pending"
+            })
         if existing:
             raise ValueError("Extension request already pending for this task")
 
@@ -191,6 +218,7 @@ class ExtensionService:
             "student_uid": student_uid,
             "task_id": request_data.task_id,
             "subject_id": str(task["subject_id"]),
+            "group_id": group_id,
             "current_deadline": current_deadline,
             "requested_deadline": request_data.requested_deadline,
             "extension_days": extension_days,
@@ -260,7 +288,12 @@ class ExtensionService:
         query = {}
 
         if student_uid:
-            query["student_uid"] = student_uid
+            group_docs = await self.groups_collection.find({"member_uids": student_uid}).to_list(None)
+            group_ids = [str(g["_id"]) for g in group_docs if g.get("_id")]
+            or_clauses = [{"student_uid": student_uid}]
+            if group_ids:
+                or_clauses.append({"group_id": {"$in": group_ids}})
+            query["$or"] = or_clauses
 
         if teacher_uid:
             # Get subjects taught by this teacher
@@ -329,11 +362,12 @@ class ExtensionService:
             }
         )
 
-        # Update task deadline
-        await self.tasks_collection.update_one(
-            {"_id": ObjectId(extension["task_id"])},
-            {"$set": {"deadline": final_deadline}}
-        )
+        task_kind = str(task.get("type") or "individual")
+        if task_kind != "group":
+            await self.tasks_collection.update_one(
+                {"_id": ObjectId(extension["task_id"])},
+                {"$set": {"deadline": final_deadline}}
+            )
 
         # Get updated extension
         updated = await self.collection.find_one({"_id": ObjectId(extension_id)})
@@ -439,6 +473,13 @@ class ExtensionService:
         if extension_doc.get("ai_analysis"):
             ai_analysis = ExtensionAIAnalysis(**extension_doc["ai_analysis"])
 
+        group_id = extension_doc.get("group_id")
+        group_name = None
+        if group_id and ObjectId.is_valid(group_id):
+            group = await self.groups_collection.find_one({"_id": ObjectId(group_id)})
+            if group:
+                group_name = group.get("name")
+
         return ExtensionRequestResponse(
             id=str(extension_doc["_id"]),
             student_uid=extension_doc["student_uid"],
@@ -447,6 +488,8 @@ class ExtensionService:
             task_title=task_title,
             subject_id=extension_doc.get("subject_id"),
             subject_name=subject_name,
+            group_id=group_id,
+            group_name=group_name,
             current_deadline=extension_doc["current_deadline"],
             requested_deadline=extension_doc["requested_deadline"],
             extension_days=extension_doc["extension_days"],

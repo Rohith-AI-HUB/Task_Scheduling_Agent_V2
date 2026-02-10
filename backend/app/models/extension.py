@@ -25,6 +25,7 @@ class ExtensionRequestCreate(BaseModel):
     task_id: str = Field(..., description="Task ID for which extension is requested")
     requested_deadline: datetime = Field(..., description="Requested new deadline")
     reason: str = Field(..., min_length=10, max_length=1000, description="Reason for extension request")
+    group_id: Optional[str] = Field(None, description="Group ID for group tasks (optional)")
 
 
 class ExtensionRequestResponse(BaseModel):
@@ -37,6 +38,8 @@ class ExtensionRequestResponse(BaseModel):
     task_title: Optional[str] = Field(None, description="Task title")
     subject_id: Optional[str] = Field(None, description="Subject ID")
     subject_name: Optional[str] = Field(None, description="Subject name")
+    group_id: Optional[str] = Field(None, description="Group ID for group tasks")
+    group_name: Optional[str] = Field(None, description="Group name for group tasks")
     current_deadline: datetime = Field(..., description="Current task deadline")
     requested_deadline: datetime = Field(..., description="Requested new deadline")
     extension_days: int = Field(..., description="Number of days extension requested")
