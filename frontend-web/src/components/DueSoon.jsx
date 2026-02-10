@@ -38,6 +38,22 @@ const DueSoon = ({ days = 7, limit = 5 }) => {
     load();
   }, [days, limit]);
 
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState !== 'visible') return;
+      load({ silent: true });
+    };
+    const intervalId = window.setInterval(tick, 5000);
+    const onVis = () => {
+      if (document.visibilityState === 'visible') tick();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [days, limit]);
+
   const formatDue = (deadline) => {
     if (!deadline) return '';
     const d = new Date(deadline);

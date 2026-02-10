@@ -32,6 +32,22 @@ const AISchedule = () => {
     load();
   }, []);
 
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState !== 'visible') return;
+      load({ silent: true });
+    };
+    const intervalId = window.setInterval(tick, 5000);
+    const onVis = () => {
+      if (document.visibilityState === 'visible') tick();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, []);
+
   const items = useMemo(() => schedule?.tasks || [], [schedule]);
 
   const stats = useMemo(() => {

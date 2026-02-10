@@ -38,6 +38,7 @@ const TeacherDashboard = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({ name: '', code: '' });
   const [editError, setEditError] = useState('');
+  const [showChat, setShowChat] = useState(false);
 
   const [processingExt, setProcessingExt] = useState({});
   const [copyState, setCopyState] = useState({ subjectId: null, copiedAt: 0 });
@@ -208,10 +209,9 @@ const TeacherDashboard = () => {
   useEffect(() => {
     loadAllData({ silent: false });
     
-    // Auto-refresh every 30s
     const interval = setInterval(() => {
       if (!document.hidden) loadAllData({ silent: true });
-    }, 30000);
+    }, 5000);
 
     const onVisChange = () => {
       if (!document.hidden) loadAllData({ silent: true });
@@ -223,6 +223,19 @@ const TeacherDashboard = () => {
       document.removeEventListener('visibilitychange', onVisChange);
     };
   }, [loadAllData]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission === 'granted') {
+      enablePushNotifications().catch(() => {});
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => setShowChat(true), 800);
+    return () => window.clearTimeout(handle);
+  }, []);
 
   // Filtered Subjects
   const filteredSubjects = useMemo(() => {
@@ -403,7 +416,7 @@ const TeacherDashboard = () => {
                 type="button"
                 title="Notifications"
                 onClick={async () => {
-                  if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
+                  if (typeof Notification !== 'undefined' && Notification.permission !== 'denied') {
                     await enablePushNotifications().catch(() => {});
                   }
                   setIsNotificationsOpen((v) => !v);
@@ -563,7 +576,13 @@ const TeacherDashboard = () => {
           </div>
 
           <div className="col-span-12 md:col-span-6 lg:col-span-4 row-span-3 min-h-[557px]">
-            <ChatAssistant height="100%" className="h-full" minimizedHeight={56} />
+            {showChat ? (
+              <ChatAssistant height="100%" className="h-full" minimizedHeight={56} />
+            ) : (
+              <div className="bento-card p-6 flex items-center justify-center text-sm text-slate-500 h-full">
+                Loading assistant...
+              </div>
+            )}
           </div>
 
           {/* Upcoming Tasks */}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
@@ -14,6 +14,8 @@ const StudentDashboard = () => {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationsButtonRef = useRef(null);
   const notificationsPanelRef = useRef(null);
+  const subjectsInFlightRef = useRef(false);
+  const extensionsInFlightRef = useRef(false);
 
   const resolvePhotoUrl = (photoUrl) => {
     if (!photoUrl) return '';
@@ -31,36 +33,78 @@ const StudentDashboard = () => {
 
   const [extensions, setExtensions] = useState([]);
   const [extLoading, setExtLoading] = useState(true);
+  const [showChat, setShowChat] = useState(false);
 
   const enrolledCount = useMemo(() => subjects.length, [subjects]);
 
-  const loadSubjects = async () => {
-    setIsLoading(true);
+  const loadSubjects = useCallback(async ({ silent = false } = {}) => {
+    if (subjectsInFlightRef.current) return;
+    subjectsInFlightRef.current = true;
+    if (!silent) setIsLoading(true);
     try {
       const response = await api.get('/subjects');
       setSubjects(response.data || []);
     } catch (err) {
       console.error(err);
     } finally {
+      subjectsInFlightRef.current = false;
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const loadExtensions = async () => {
-    setExtLoading(true);
+  const loadExtensions = useCallback(async ({ silent = false } = {}) => {
+    if (extensionsInFlightRef.current) return;
+    extensionsInFlightRef.current = true;
+    if (!silent) setExtLoading(true);
     try {
       const data = await aiService.getExtensionRequests();
       setExtensions(data?.items || []);
     } catch (err) {
       console.error(err);
     } finally {
+      extensionsInFlightRef.current = false;
       setExtLoading(false);
     }
-  };
+  }, []);
+
+  const loadAllData = useCallback(async ({ silent = false } = {}) => {
+    await Promise.allSettled([
+      loadSubjects({ silent }),
+      loadExtensions({ silent }),
+    ]);
+  }, [loadSubjects, loadExtensions]);
 
   useEffect(() => {
-    loadSubjects();
-    loadExtensions();
+    loadAllData({ silent: false });
+  }, [loadAllData]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission === 'granted') {
+      enablePushNotifications().catch(() => {});
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState !== 'visible') return;
+      loadAllData({ silent: true });
+    };
+    const intervalId = window.setInterval(tick, 5000);
+    const onVis = () => {
+      if (document.visibilityState === 'visible') tick();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [loadAllData]);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => setShowChat(true), 800);
+    return () => window.clearTimeout(handle);
   }, []);
 
   useEffect(() => {
@@ -187,7 +231,7 @@ const StudentDashboard = () => {
               title="Notifications"
               type="button"
               onClick={async () => {
-                if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
+                if (typeof Notification !== 'undefined' && Notification.permission !== 'denied') {
                   await enablePushNotifications().catch(() => {});
                 }
                 setIsNotificationsOpen((v) => !v);
@@ -441,7 +485,13 @@ const StudentDashboard = () => {
           </div>
 
           <div className="col-span-12 lg:col-span-4">
-            <ChatAssistant height="560px" />
+            {showChat ? (
+              <ChatAssistant height="560px" />
+            ) : (
+              <div className="bento-card p-6 flex items-center justify-center text-sm text-slate-500" style={{ height: '560px' }}>
+                Loading assistant...
+              </div>
+            )}
           </div>
         </div>
       </main>
