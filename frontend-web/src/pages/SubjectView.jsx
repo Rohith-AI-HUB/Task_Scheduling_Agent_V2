@@ -116,7 +116,8 @@ const SubjectView = () => {
 
     const shuffled = [...students];
     for (let i = shuffled.length - 1; i > 0; i -= 1) {
-      const r = (Math.random() + previewNonce * 0.000001) % 1;
+      const rand32 = window.crypto.getRandomValues(new Uint32Array(1))[0];
+      const r = (rand32 * Math.pow(2, -32) + previewNonce * 0.000001) % 1;
       const j = Math.floor(r * (i + 1));
       const tmp = shuffled[i];
       shuffled[i] = shuffled[j];
