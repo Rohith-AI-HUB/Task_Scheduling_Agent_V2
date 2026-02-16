@@ -63,25 +63,6 @@ def _safe_filename(name: str) -> str:
     return cleaned
 
 
-def _safe_legacy_avatar_path(filename: str) -> Path | None:
-    value = (filename or "").strip()
-    if not value or value in {".", ".."}:
-        return None
-    if "/" in value or "\\" in value:
-        return None
-    if not _AVATAR_NAME_RE.fullmatch(value):
-        return None
-    avatars_root = (Path(settings.uploads_dir) / "avatars").resolve(strict=False)
-    target = (avatars_root / value).resolve(strict=False)
-    try:
-        target.relative_to(avatars_root)
-    except ValueError:
-        return None
-    if target.name != value:
-        return None
-    return target
-
-
 async def _read_upload_file(file: UploadFile) -> tuple[bytes, str, str]:
     content_type = str(file.content_type or "").lower().strip()
     data = bytearray()
@@ -106,8 +87,20 @@ def _delete_legacy_avatar(photo_url: Any) -> None:
     match = _LEGACY_AVATAR_URL_RE.fullmatch(photo_url.strip())
     if not match:
         return
-    target = _safe_legacy_avatar_path(match.group(1))
-    if target is None:
+    value = (match.group(1) or "").strip()
+    if not value or value in {".", ".."}:
+        return
+    if "/" in value or "\\" in value:
+        return
+    if not _AVATAR_NAME_RE.fullmatch(value):
+        return
+    avatars_root = (Path(settings.uploads_dir) / "avatars").resolve(strict=False)
+    target = (avatars_root / value).resolve(strict=False)
+    try:
+        target.relative_to(avatars_root)
+    except ValueError:
+        return
+    if target.name != value:
         return
     try:
         if target.exists() and target.is_file() and not target.is_symlink():
