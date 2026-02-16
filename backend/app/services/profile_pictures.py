@@ -4,6 +4,7 @@ from datetime import datetime
 import logging
 import secrets
 from pathlib import Path
+import re
 from typing import Any, AsyncIterator
 
 from bson import ObjectId
@@ -17,6 +18,7 @@ from app.database.collections import get_collection
 logger = logging.getLogger(__name__)
 
 _ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
+_AVATAR_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*([.][A-Za-z0-9_-]+)?$")
 
 
 def _bucket_and_collection_for_role(role: str) -> tuple[str, str]:
@@ -60,6 +62,21 @@ def _safe_filename(name: str) -> str:
     return cleaned
 
 
+def _safe_legacy_avatar_path(filename: str) -> Path | None:
+    value = (filename or "").strip()
+    if not value or value in {".", ".."}:
+        return None
+    if "/" in value or "\\" in value:
+        return None
+    if not _AVATAR_NAME_RE.fullmatch(value):
+        return None
+    avatars_root = (Path(settings.uploads_dir) / "avatars").resolve(strict=False)
+    target = (avatars_root / value).resolve(strict=False)
+    if avatars_root not in target.parents and target != avatars_root:
+        return None
+    return target
+
+
 async def _read_upload_file(file: UploadFile) -> tuple[bytes, str, str]:
     content_type = str(file.content_type or "").lower().strip()
     data = bytearray()
@@ -82,16 +99,12 @@ def _delete_legacy_avatar(photo_url: Any) -> None:
     if not isinstance(photo_url, str) or not photo_url.startswith("/uploads/avatars/"):
         return
     filename = photo_url.split("/uploads/avatars/", 1)[1]
-    base = Path(filename).name
-    if not base or base != filename or base in {".", ".."}:
-        return
-    safe_name = _safe_filename(base)
-    if safe_name != base:
+    target = _safe_legacy_avatar_path(filename)
+    if target is None:
         return
     try:
-        p = Path(settings.uploads_dir) / "avatars" / safe_name
-        if p.exists() and p.is_file():
-            p.unlink()
+        if target.exists() and target.is_file():
+            target.unlink()
     except Exception:
         logger.warning("profile_picture.legacy_delete_failed", exc_info=True)
 
