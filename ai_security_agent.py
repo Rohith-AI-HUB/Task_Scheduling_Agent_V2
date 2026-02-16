@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 
 import requests
@@ -54,26 +55,56 @@ Return ONLY a unified git diff patch.
 Do not add explanations.
 Do not modify unrelated code.
 """
-    result = subprocess.run(
-        ["ollama", "run", "gpt-oss:120b-cloud"],
-        input=prompt.encode(),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    if result.returncode != 0:
-        raise SystemExit(result.stderr.decode() or "Ollama failed to run")
-    return result.stdout.decode()
+    output = _run_ollama(prompt)
+    patch = _extract_patch(output)
+    if patch:
+        return patch
+    retry_prompt = f"""
+Return ONLY a valid unified git diff patch.
+Do not wrap in code fences.
+Do not add explanations.
+
+Rule: {rule}
+Description: {description}
+
+Vulnerable code:
+{code}
+"""
+    output = _run_ollama(retry_prompt)
+    return _extract_patch(output) or output
 
 
 def create_pr(patch_text):
-    with open("fix.patch", "w", encoding="utf8") as f:
-        f.write(patch_text)
+    patch = _extract_patch(patch_text)
+    if not _is_patch(patch):
+        print("LLM did not generate a valid patch")
+        return
 
-    subprocess.run(["git", "checkout", "-b", "ai/security-fix"], check=False)
-    subprocess.run(["git", "apply", "fix.patch"], check=False)
-    subprocess.run(["git", "add", "."], check=False)
-    subprocess.run(["git", "commit", "-m", "AI security fix"], check=False)
-    subprocess.run(["git", "push", "origin", "ai/security-fix", "--force"], check=False)
+    status = _run_git(["status", "--porcelain"], capture_output=True)
+    if status.stdout.strip():
+        print("Working tree is not clean. Commit or stash changes and retry.")
+        return
+
+    _run_git(["checkout", "-B", "ai/security-fix"], check=True)
+    apply = _run_git(["apply", "-"], input_text=patch)
+    if apply.returncode != 0:
+        print("Patch failed to apply")
+        print(apply.stderr.strip() or apply.stdout.strip())
+        return
+
+    status = _run_git(["status", "--porcelain"], capture_output=True)
+    if not status.stdout.strip():
+        print("Patch applied no changes")
+        return
+
+    _run_git(["add", "-A"], check=True)
+    _run_git(["commit", "-m", "AI security fix"], check=False)
+    _run_git(["push", "origin", "ai/security-fix", "--force"], check=False)
+
+    if shutil.which("gh") is None:
+        print("GitHub CLI not found. Create PR at:")
+        print(f"https://github.com/{REPO}/pull/new/ai/security-fix")
+        return
 
     subprocess.run(
         [
@@ -93,6 +124,52 @@ def create_pr(patch_text):
 
 def _headers():
     return {"Authorization": f"Bearer {TOKEN}", "Accept": "application/vnd.github+json"}
+
+
+def _is_patch(text):
+    if not text:
+        return False
+    cleaned = text.lstrip()
+    return (
+        "diff --git " in cleaned
+        or (cleaned.startswith("--- ") and "\n+++ " in cleaned and "\n@@ " in cleaned)
+    )
+
+
+def _extract_patch(text):
+    if not text:
+        return ""
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        parts = cleaned.split("```")
+        cleaned = max(parts, key=len).strip()
+    if "diff --git " in cleaned:
+        return cleaned[cleaned.find("diff --git ") :].strip()
+    if cleaned.startswith("--- ") and "\n+++ " in cleaned and "\n@@ " in cleaned:
+        return cleaned
+    return ""
+
+
+def _run_ollama(prompt):
+    result = subprocess.run(
+        ["ollama", "run", "deepseek-coder:1.3b-instruct"],
+        input=prompt.encode(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        raise SystemExit(result.stderr.decode() or "Ollama failed to run")
+    return result.stdout.decode()
+
+
+def _run_git(args, input_text=None, capture_output=False, check=False):
+    return subprocess.run(
+        ["git", *args],
+        input=input_text.encode() if input_text is not None else None,
+        stdout=subprocess.PIPE if capture_output else None,
+        stderr=subprocess.PIPE if capture_output else None,
+        check=check,
+    )
 
 
 def main():
@@ -117,11 +194,10 @@ def main():
 
     snippet = get_snippet(path, line)
     patch = ask_llm(rule, description, snippet)
-
-    if "diff" in patch:
+    if _is_patch(patch):
         create_pr(patch)
     else:
-        print("LLM did not generate patch")
+        print("LLM did not generate a valid patch")
 
 
 if __name__ == "__main__":
