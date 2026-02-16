@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import certifi
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from pymongo import ASCENDING
 
@@ -27,13 +28,15 @@ async def connect_to_mongo() -> None:
     if _client is not None:
         return
 
-    client = AsyncIOMotorClient(
-        settings.mongodb_url,
-        serverSelectionTimeoutMS=settings.mongodb_server_selection_timeout_ms,
-        connectTimeoutMS=settings.mongodb_server_selection_timeout_ms,
-        socketTimeoutMS=settings.mongodb_server_selection_timeout_ms,
-        uuidRepresentation="standard",
-    )
+    mongo_kwargs = {
+        "serverSelectionTimeoutMS": settings.mongodb_server_selection_timeout_ms,
+        "connectTimeoutMS": settings.mongodb_server_selection_timeout_ms,
+        "socketTimeoutMS": settings.mongodb_server_selection_timeout_ms,
+        "uuidRepresentation": "standard",
+    }
+    if settings.mongodb_url.startswith("mongodb+srv://") or "tls=true" in settings.mongodb_url:
+        mongo_kwargs["tlsCAFile"] = certifi.where()
+    client = AsyncIOMotorClient(settings.mongodb_url, **mongo_kwargs)
     try:
         await client.admin.command("ping")
     except Exception:
