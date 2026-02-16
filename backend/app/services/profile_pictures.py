@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 _ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 _AVATAR_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*([.][A-Za-z0-9_-]+)?$")
+_LEGACY_AVATAR_URL_RE = re.compile(r"^/uploads/avatars/([A-Za-z0-9][A-Za-z0-9_-]*([.][A-Za-z0-9_-]+)?)$")
 
 
 def _bucket_and_collection_for_role(role: str) -> tuple[str, str]:
@@ -72,7 +73,11 @@ def _safe_legacy_avatar_path(filename: str) -> Path | None:
         return None
     avatars_root = (Path(settings.uploads_dir) / "avatars").resolve(strict=False)
     target = (avatars_root / value).resolve(strict=False)
-    if avatars_root not in target.parents and target != avatars_root:
+    try:
+        target.relative_to(avatars_root)
+    except ValueError:
+        return None
+    if target.name != value:
         return None
     return target
 
@@ -96,14 +101,16 @@ def _new_public_id() -> str:
 
 
 def _delete_legacy_avatar(photo_url: Any) -> None:
-    if not isinstance(photo_url, str) or not photo_url.startswith("/uploads/avatars/"):
+    if not isinstance(photo_url, str):
         return
-    filename = photo_url.split("/uploads/avatars/", 1)[1]
-    target = _safe_legacy_avatar_path(filename)
+    match = _LEGACY_AVATAR_URL_RE.fullmatch(photo_url.strip())
+    if not match:
+        return
+    target = _safe_legacy_avatar_path(match.group(1))
     if target is None:
         return
     try:
-        if target.exists() and target.is_file():
+        if target.exists() and target.is_file() and not target.is_symlink():
             target.unlink()
     except Exception:
         logger.warning("profile_picture.legacy_delete_failed", exc_info=True)
