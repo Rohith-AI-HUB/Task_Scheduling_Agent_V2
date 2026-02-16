@@ -1,0 +1,101 @@
+Thinking...
+We need to fix path injection vulnerability. The vulnerable code is in _delete_legacy_avatar? Also reading upload file? The issue: uncontrolled data used in path expression: constructing paths with user-provided values without validation.
+
+In upsert_profile_picture, they use safe_original = _safe_filename(original_name) then filename = f"{uid}/{safe_original}". If safe_original ensures no path traversal, fine.
+
+But maybe _delete_legacy_avatar also uses user-provided photo_url to form path; they already have checks to prevent traversal. Might need stricter validation.
+
+The rule "py/path-injection" likely flags constructing path from external input without sanitization. The code using Path(settings.uploads_dir) / "avatars" ... target = (avatars_root / value).resolve(strict=False). Already checks relative_to and name equality.
+
+But perhaps the vulnerability is in upsert_profile_picture: filename f"{uid}/{safe_original}" used for GridFS upload - but GridFS expects filename string; path injection maybe not proper. However expecting to store as path-like.
+
+The fix could be to use pathlib's joinpath and not allow slashes in safe_original. Ensure safe_original removes path separators.
+
+We need to modify _safe_filename function maybe not present. Not in snippet. So maybe path injection in reading file: they read file.filename used later.
+
+We need to add validation: ensure filename does not contain path separators or reference components.
+
+Add a function _sanitize_path_component to strip slashes and backslashes, enforce regex.
+
+Implement in code: after safe_original = _safe_filename(original_name) ensure safe_original does not contain "/" or "\" and matches allowed pattern.
+
+Alternatively modify _safe_filename implementation.
+
+But we don't see its code; maybe it's defined elsewhere and already safe. Unknown.
+
+The rule points to "Uncontrolled data used in path expression". The path expression is "avatars_root / value" and also "uid/{safe_original}". Probably need to ensure uid also safe. uid is from current_user["uid"]; maybe could be malicious if admin controlled? Probably okay.
+
+Implement a strict validation for uid to be alphanumeric and length.
+
+Thus patch: add validation for uid and for safe_original (no separators) before constructing path.
+
+Implement a function _is_valid_path_component and raise error if not.
+
+Will modify upsert_profile_picture near where safe_original is used.
+
+Add:
+
+def _is_valid_path_component(name: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z0-9._-]+", name))
+
+Then after safe_original = _safe_filename(original_name), check that safe_original not contain path separators and matches.
+
+If not raise HTTPException 400.
+
+Similarly for uid.
+
+Add import re.
+
+Implement.
+
+Let's produce diff.
+
+...done thinking.
+
+```diff
+@@
+ import re
+ import secrets
+ from pathlib import Path
+@@
+ async def upsert_profile_picture(current_user: dict, file: UploadFile) -> str:
+     role = str(current_user.get("role") or "").strip().lower()
+     uid = str(current_user.get("uid") or "").strip()
+     if not uid:
+         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid user")
++    # Ensure the user identifier cannot be used for path traversal
++    if "/" in uid or "\\" in uid or not re.fullmatch(r"[A-Za-z0-9._-]+", uid):
++        raise HTTPException(
++            status_code=status.HTTP_400_BAD_REQUEST,
++            detail="Invalid user identifier"
++        )
+@@
+     data, content_type, original_name = await _read_upload_file(file)
+     _validate_image_bytes(content_type, data)
+-    safe_original = _safe_filename(original_name)
++    safe_original = _safe_filename(original_name)
++    # Validate that the sanitized filename does not contain any path separators
++    if "/" in safe_original or "\\" in safe_original:
++        raise HTTPException(
++            status_code=status.HTTP_400_BAD_REQUEST,
++            detail="Invalid filename"
++        )
++    # Enforce a strict filename pattern (alphanumeric, dash, underscore, dot)
++    if not re.fullmatch(r"[A-Za-z0-9._-]+", safe_original):
++        raise HTTPException(
++            status_code=status.HTTP_400_BAD_REQUEST,
++            detail="Invalid filename"
++        )
+@@
+-        new_file_id = await bucket.upload_from_stream(
+-            filename=f"{uid}/{safe_original}",
+-            source=data,
+-            metadata={
++        # Construct a safe GridFS filename without allowing path traversal
++        gridfs_filename = f"{uid}/{safe_original}"
++        new_file_id = await bucket.upload_from_stream(
++            filename=gridfs_filename,
++            source=data,
++            metadata={
+```
+
