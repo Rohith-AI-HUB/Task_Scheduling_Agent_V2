@@ -49,6 +49,17 @@ def _gridfs_bucket(bucket_name: str) -> AsyncIOMotorGridFSBucket:
     return AsyncIOMotorGridFSBucket(get_db(), bucket_name=bucket_name)
 
 
+def _safe_filename(name: str) -> str:
+    value = (name or "").strip()
+    base = Path(value).name
+    if not base or base in {".", ".."}:
+        return "file"
+    cleaned = base.replace("\x00", "").replace(":", "_").replace("/", "_").replace("\\", "_")
+    if not cleaned or cleaned in {".", ".."}:
+        return "file"
+    return cleaned
+
+
 async def _read_upload_file(file: UploadFile) -> tuple[bytes, str, str]:
     content_type = str(file.content_type or "").lower().strip()
     data = bytearray()
@@ -71,8 +82,14 @@ def _delete_legacy_avatar(photo_url: Any) -> None:
     if not isinstance(photo_url, str) or not photo_url.startswith("/uploads/avatars/"):
         return
     filename = photo_url.split("/uploads/avatars/", 1)[1]
+    base = Path(filename).name
+    if not base or base != filename or base in {".", ".."}:
+        return
+    safe_name = _safe_filename(base)
+    if safe_name != base:
+        return
     try:
-        p = Path(settings.uploads_dir) / "avatars" / filename
+        p = Path(settings.uploads_dir) / "avatars" / safe_name
         if p.exists() and p.is_file():
             p.unlink()
     except Exception:
@@ -93,6 +110,7 @@ async def upsert_profile_picture(current_user: dict, file: UploadFile) -> str:
 
     data, content_type, original_name = await _read_upload_file(file)
     _validate_image_bytes(content_type, data)
+    safe_original = _safe_filename(original_name)
 
     uploaded_at = datetime.utcnow()
     public_id = _new_public_id()
@@ -110,7 +128,7 @@ async def upsert_profile_picture(current_user: dict, file: UploadFile) -> str:
         _delete_legacy_avatar(current_user.get("photo_url"))
 
         new_file_id = await bucket.upload_from_stream(
-            filename=f"{uid}/{original_name}",
+            filename=f"{uid}/{safe_original}",
             source=data,
             metadata={
                 "user_uid": uid,

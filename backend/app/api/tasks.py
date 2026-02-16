@@ -115,9 +115,22 @@ def _uploads_root() -> Path:
 def _safe_filename(name: str) -> str:
     value = (name or "").strip()
     base = Path(value).name
-    if not base:
+    if not base or base in {".", ".."}:
         return "file"
-    return base.replace("\x00", "")
+    cleaned = base.replace("\x00", "").replace(":", "_").replace("/", "_").replace("\\", "_")
+    if not cleaned or cleaned in {".", ".."}:
+        return "file"
+    return cleaned
+
+
+def _safe_upload_path(root: Path, filename: str, attachment_id: str) -> tuple[str, Path]:
+    safe_name = _safe_filename(filename)
+    dest = root / f"{attachment_id}_{safe_name}"
+    root_resolved = root.resolve()
+    dest_resolved = dest.resolve()
+    if root_resolved not in dest_resolved.parents and dest_resolved != root_resolved:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file name")
+    return safe_name, dest
 
 
 def _validate_file(file: UploadFile) -> None:
@@ -372,7 +385,7 @@ async def upload_task_attachments(
                     }
                 )
             else:
-                dest = root / f"{attachment_id}_{filename}"
+                filename, dest = _safe_upload_path(root, filename, attachment_id)
                 size = await _save_upload(file, dest)
                 saved_paths.append(dest)
                 attachments_to_add.append(
