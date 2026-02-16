@@ -7,12 +7,24 @@ const apiRoot = () => String(api?.defaults?.baseURL || '').replace(/\/api\/?$/, 
 
 const resolvePhotoUrl = (photoUrl) => {
   if (!photoUrl) return '';
-  const u = String(photoUrl).trim();
-  if (!u) return '';
-  if (u.startsWith('blob:')) return u;
-  if (u.startsWith('http://') || u.startsWith('https://')) return u;
-  if (u.startsWith('/')) return `${apiRoot()}${u}`;
-  return '';
+  const raw = String(photoUrl).trim();
+  if (!raw) return '';
+  if (raw.startsWith('blob:')) return raw;
+  if (raw.startsWith('/')) {
+    const root = apiRoot();
+    try {
+      return new URL(raw, root).toString();
+    } catch {
+      return '';
+    }
+  }
+  try {
+    const url = new URL(raw);
+    if (url.protocol === 'http:' || url.protocol === 'https:') return url.toString();
+    return '';
+  } catch {
+    return '';
+  }
 };
 
 const Profile = () => {
@@ -182,6 +194,7 @@ const Profile = () => {
                       src={displayPhoto}
                       alt="Profile"
                       className="h-full w-full object-cover"
+                      referrerPolicy="no-referrer"
                     />
                   ) : (
                     <span className="material-symbols-outlined text-4xl text-primary">person</span>
