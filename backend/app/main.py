@@ -68,4 +68,4 @@ app.include_router(push.router, prefix="/api/push", tags=["push"])
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return "OK"
