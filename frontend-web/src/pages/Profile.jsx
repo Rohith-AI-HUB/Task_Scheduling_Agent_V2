@@ -5,22 +5,24 @@ import { useAuth } from '../context/AuthContext';
 
 const apiRoot = () => String(api?.defaults?.baseURL || '').replace(/\/api\/?$/, '');
 
+const getBaseOrigin = () => {
+  const root = apiRoot();
+  if (root) return root;
+  if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
+  return '';
+};
+
 const resolvePhotoUrl = (photoUrl) => {
   if (!photoUrl) return '';
   const raw = String(photoUrl).trim();
   if (!raw) return '';
-  if (raw.startsWith('blob:')) return raw;
-  if (raw.startsWith('/')) {
-    const root = apiRoot();
-    try {
-      return new URL(raw, root).toString();
-    } catch {
-      return '';
-    }
-  }
+  if (raw.startsWith('blob:')) return encodeURI(raw);
   try {
-    const url = new URL(raw);
-    if (url.protocol === 'http:' || url.protocol === 'https:') return url.toString();
+    const base = getBaseOrigin();
+    const url = base ? new URL(raw, base) : new URL(raw);
+    if (url.protocol === 'http:' || url.protocol === 'https:' || url.protocol === 'blob:') {
+      return encodeURI(url.toString());
+    }
     return '';
   } catch {
     return '';
