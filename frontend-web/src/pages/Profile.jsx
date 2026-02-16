@@ -7,9 +7,12 @@ const apiRoot = () => String(api?.defaults?.baseURL || '').replace(/\/api\/?$/, 
 
 const resolvePhotoUrl = (photoUrl) => {
   if (!photoUrl) return '';
-  const u = String(photoUrl);
+  const u = String(photoUrl).trim();
+  if (!u) return '';
+  if (u.startsWith('blob:')) return u;
   if (u.startsWith('http://') || u.startsWith('https://')) return u;
-  return `${apiRoot()}${u}`;
+  if (u.startsWith('/')) return `${apiRoot()}${u}`;
+  return '';
 };
 
 const Profile = () => {
@@ -26,11 +29,14 @@ const Profile = () => {
   const [success, setSuccess] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
 
-  const currentPhoto = useMemo(() => resolvePhotoUrl(backendUser?.photo_url), [backendUser?.photo_url]);
   const previewPhoto = useMemo(() => {
     if (!selectedFile) return '';
     return URL.createObjectURL(selectedFile);
   }, [selectedFile]);
+  const displayPhoto = useMemo(
+    () => resolvePhotoUrl(previewPhoto || backendUser?.photo_url),
+    [previewPhoto, backendUser?.photo_url]
+  );
 
   useEffect(() => {
     refreshBackendUser?.().catch(() => {});
@@ -171,9 +177,9 @@ const Profile = () => {
             <div className="rounded-xl border border-[#d5cee9] bg-white p-6 shadow-sm dark:bg-white/5 dark:border-white/10">
               <div className="flex flex-col items-center gap-4">
                 <div className="h-24 w-24 rounded-full overflow-hidden border-2 border-primary/30 bg-gradient-to-br from-primary/30 to-primary/10 flex items-center justify-center">
-                  {previewPhoto || currentPhoto ? (
+                  {displayPhoto ? (
                     <img
-                      src={previewPhoto || currentPhoto}
+                      src={displayPhoto}
                       alt="Profile"
                       className="h-full w-full object-cover"
                     />
