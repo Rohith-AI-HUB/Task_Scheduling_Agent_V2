@@ -14,8 +14,21 @@ jobs:
         run: |
           BASE_URL="${RENDER_URL:-https://task-scheduling-agent-api.onrender.com}"
           URL="${BASE_URL%/}/health"
-          status=$(curl -sS -o /dev/null -w "%{http_code}" --retry 5 --retry-all-errors --max-time 20 "$URL")
-          echo "Pinged $URL -> HTTP $status"
-          if [ "$status" -lt 200 ] || [ "$status" -ge 400 ]; then
-            exit 1
-          fi
+
+          echo "Waking Render service at $URL"
+
+          for i in {1..20}; do
+            status=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
+            echo "Attempt $i -> HTTP $status"
+
+            if [ "$status" = "200" ]; then
+              echo "Render is awake"
+              exit 0
+            fi
+
+            sleep 15
+          done
+
+          echo "Render never woke up"
+          exit 1
+
