@@ -1,0 +1,13 @@
+name: AI Security Fixer
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+
+jobs:
+  scan:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run AI Agent
+        run: python ai_security_agent.py
