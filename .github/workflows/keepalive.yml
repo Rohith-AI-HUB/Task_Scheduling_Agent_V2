@@ -8,12 +8,12 @@ on:
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 6
     steps:
       - name: Wake up Render
         run: |
           BASE_URL="${RENDER_URL:-https://task-scheduling-agent-api.onrender.com}"
-          URL="${BASE_URL%/}/health"
+          URL="${BASE_URL%/}/live"
 
           echo "Waking Render service at $URL"
 
@@ -31,4 +31,3 @@ jobs:
 
           echo "Render never woke up"
           exit 1
-

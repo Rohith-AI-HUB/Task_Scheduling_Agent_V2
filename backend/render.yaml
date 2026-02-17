@@ -27,5 +27,5 @@ services:
         value: "true"
       - key: GROQ_ENABLE_CACHING
         value: "true"
-    healthCheckPath: /health
+    healthCheckPath: /ready
     autoDeploy: true

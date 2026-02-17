@@ -38,10 +38,49 @@ const api = axios.create({
   },
 });
 
+const apiRoot = () => String(api?.defaults?.baseURL || '').replace(/\/api\/?$/, '');
+
+const baseOrigin = () => {
+  const root = apiRoot();
+  if (root) return root;
+  if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
+  return '';
+};
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+let readinessPromise = null;
+
+const ensureBackendReady = async () => {
+  if (readinessPromise) return readinessPromise;
+  readinessPromise = (async () => {
+    const origin = baseOrigin();
+    if (!origin) return;
+    const url = `${origin.replace(/\/$/, '')}/ready`;
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), 4000);
+        const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+        window.clearTimeout(timeoutId);
+        if (response.ok) {
+          const data = await response.json().catch(() => null);
+          if (!data || data.ready !== false) return;
+        }
+      } catch {
+      }
+      await wait(1500);
+    }
+  })();
+  return readinessPromise;
+};
+
 // Request interceptor to add auth token
 api.interceptors.request.use(
   async (config) => {
     try {
+      await ensureBackendReady();
       if (config.data instanceof FormData) {
         if (config.headers && config.headers['Content-Type']) {
           delete config.headers['Content-Type'];

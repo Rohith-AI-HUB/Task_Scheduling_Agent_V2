@@ -1,6 +1,9 @@
 import logging
 import os
+import threading
+import time
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -19,6 +22,7 @@ def _parse_origins(value: str) -> list[str]:
 
 
 async def _on_startup() -> None:
+    app.state.ready = False
     initialize_firebase()
     mongo_required = settings.mongodb_required
     if os.getenv("MONGODB_REQUIRED") is None and settings.debug:
@@ -31,13 +35,18 @@ async def _on_startup() -> None:
         if mongo_required:
             raise
         logger.error("MongoDB initialization failed: %s", exc)
+    app.state.ready = True
+    _start_keepalive()
 
 
 async def _on_shutdown() -> None:
+    app.state.ready = False
     await close_mongo_connection()
 
 
 app = FastAPI(title=settings.app_name, debug=settings.debug)
+app.state.ready = False
+app.state.keepalive_started = False
 app.add_event_handler("startup", _on_startup)
 app.add_event_handler("shutdown", _on_shutdown)
 
@@ -65,7 +74,43 @@ app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"]
 app.include_router(profile_pictures.router, prefix="/api/profile-pictures", tags=["profile_pictures"])
 app.include_router(push.router, prefix="/api/push", tags=["push"])
 
+def _external_base_url() -> str:
+    url = os.getenv("RENDER_EXTERNAL_URL") or os.getenv("RENDER_URL") or ""
+    return url.rstrip("/")
+
+
+def _keepalive_loop() -> None:
+    base_url = _external_base_url()
+    if not base_url:
+        return
+    url = f"{base_url}/live"
+    with httpx.Client(timeout=10.0) as client:
+        while True:
+            try:
+                client.get(url)
+            except Exception:
+                pass
+            time.sleep(240)
+
+
+def _start_keepalive() -> None:
+    if app.state.keepalive_started:
+        return
+    app.state.keepalive_started = True
+    thread = threading.Thread(target=_keepalive_loop, daemon=True)
+    thread.start()
+
+
+@app.get("/live")
+async def live():
+    return {"status": "ok"}
+
+
+@app.get("/ready")
+async def ready():
+    return {"status": "ok", "ready": bool(getattr(app.state, "ready", False))}
+
 
 @app.get("/health")
 async def health():
-    return "OK"
+    return {"status": "ok", "ready": bool(getattr(app.state, "ready", False))}

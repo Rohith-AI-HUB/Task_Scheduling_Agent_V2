@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import PublicRoute from './components/auth/PublicRoute';
+import api from './services/api';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import TeacherDashboard from './pages/TeacherDashboard';
@@ -14,7 +16,23 @@ import Profile from './pages/Profile';
 import Calendar from './pages/Calendar';
 import TeacherStudentMarks from './pages/TeacherStudentMarks';
 
+const apiRoot = () => String(api?.defaults?.baseURL || '').replace(/\/api\/?$/, '');
+
+const baseOrigin = () => {
+  const root = apiRoot();
+  if (root) return root;
+  if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
+  return '';
+};
+
 function App() {
+  useEffect(() => {
+    const origin = baseOrigin();
+    if (!origin) return;
+    const url = `${origin.replace(/\/$/, '')}/live`;
+    fetch(url).catch(() => {});
+  }, []);
+
   return (
     <AuthProvider>
       <Router>
