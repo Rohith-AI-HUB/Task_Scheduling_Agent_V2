@@ -5,10 +5,14 @@ on:
     - cron: "*/5 * * * *"
   workflow_dispatch:
 
+concurrency:
+  group: keepalive
+  cancel-in-progress: true
+
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 4
     steps:
       - name: Wake up Render
         run: |
@@ -17,7 +21,7 @@ jobs:
 
           echo "Waking Render service at $URL"
 
-          for i in {1..20}; do
+          for i in {1..18}; do
             status=$(curl -s -o /dev/null -w "%{http_code}" "$URL")
             echo "Attempt $i -> HTTP $status"
 
@@ -26,7 +30,7 @@ jobs:
               exit 0
             fi
 
-            sleep 15
+            sleep 10
           done
 
           echo "Render never woke up"
